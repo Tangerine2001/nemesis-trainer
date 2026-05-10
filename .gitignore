@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.codex/
+nemesis-*.png
+.env*
+!.env.example
