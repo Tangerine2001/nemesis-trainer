@@ -1,3 +1,6 @@
+export {packBossTeam, packUserTeam} from "@/lib/showdown/team";
+export {startBattle, takeBattleTurn} from "@/lib/showdown/battle";
+
 import type {Team} from "@/lib/types";
 
 export interface SimulationResult {

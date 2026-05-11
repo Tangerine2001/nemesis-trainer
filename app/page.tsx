@@ -1,11 +1,11 @@
 "use client";
 
 import {useEffect, useMemo, useState} from "react";
-import {ClipboardPaste, FlaskConical, RefreshCcw, Share2, Swords, Wand2} from "lucide-react";
+import {ClipboardPaste, FlaskConical, Play, RefreshCcw, RotateCcw, Share2, Shield, Swords, Wand2} from "lucide-react";
 import {createAudit} from "@/lib/nemesis";
 import {SAMPLE_TEAM} from "@/lib/sample-teams";
 import {decodeSharePayload} from "@/lib/share/payload";
-import type {AuditResult, TrainerStyle} from "@/lib/types";
+import type {AuditResult, BattleChoice, BattleResponse, BattleSnapshot, TrainerStyle} from "@/lib/types";
 
 const STYLE_OPTIONS: TrainerStyle[] = ["auto", "Fast Pressure", "Wallbreaker", "Setup Snowball"];
 
@@ -14,6 +14,10 @@ export default function Home() {
   const [seed, setSeed] = useState("nemesis-demo");
   const [style, setStyle] = useState<TrainerStyle>("auto");
   const [copied, setCopied] = useState(false);
+  const [battle, setBattle] = useState<BattleSnapshot | undefined>();
+  const [battleChoices, setBattleChoices] = useState<string[]>([]);
+  const [battleError, setBattleError] = useState<string | undefined>();
+  const [battleBusy, setBattleBusy] = useState(false);
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("s");
@@ -44,6 +48,40 @@ export default function Home() {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  async function startBattle() {
+    setBattleBusy(true);
+    setBattleError(undefined);
+    try {
+      const response = await postBattle("/api/battle/start", {rawTeam, seed, style});
+      setBattle(response.snapshot);
+      setBattleChoices(response.userChoices);
+    } catch (error) {
+      setBattleError(error instanceof Error ? error.message : "Unable to start battle.");
+    } finally {
+      setBattleBusy(false);
+    }
+  }
+
+  async function chooseBattleAction(choice: string) {
+    setBattleBusy(true);
+    setBattleError(undefined);
+    try {
+      const response = await postBattle("/api/battle/turn", {rawTeam, seed, style, userChoices: battleChoices, choice});
+      setBattle(response.snapshot);
+      setBattleChoices(response.userChoices);
+    } catch (error) {
+      setBattleError(error instanceof Error ? error.message : "Unable to advance battle.");
+    } finally {
+      setBattleBusy(false);
+    }
+  }
+
+  function resetBattle() {
+    setBattle(undefined);
+    setBattleChoices([]);
+    setBattleError(undefined);
   }
 
   return (
@@ -103,14 +141,50 @@ export default function Home() {
         </div>
 
         <div className="result-panel">
-          {audit ? <AuditView audit={audit} /> : <EmptyState />}
+          {battle ? (
+            <BattleView
+              snapshot={battle}
+              busy={battleBusy}
+              error={battleError}
+              onChoose={chooseBattleAction}
+              onReset={resetBattle}
+            />
+          ) : audit ? (
+            <AuditView audit={audit} battleBusy={battleBusy} battleError={battleError} onStartBattle={startBattle} />
+          ) : (
+            <EmptyState />
+          )}
         </div>
       </section>
     </main>
   );
 }
 
-function AuditView({audit}: {audit: AuditResult}) {
+async function postBattle(path: string, body: unknown): Promise<BattleResponse> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify(body)
+  });
+  const json = await response.json();
+  if (!response.ok) {
+    const message = json.error ?? json.snapshot?.errors?.join(" ") ?? "Battle request failed.";
+    throw new Error(message);
+  }
+  return json as BattleResponse;
+}
+
+function AuditView({
+  audit,
+  battleBusy,
+  battleError,
+  onStartBattle
+}: {
+  audit: AuditResult;
+  battleBusy: boolean;
+  battleError?: string;
+  onStartBattle: () => void;
+}) {
   const topSignals = audit.analysis.signals.slice(0, 5);
 
   return (
@@ -128,6 +202,18 @@ function AuditView({audit}: {audit: AuditResult}) {
           <span>Likely lead</span>
           <strong>{audit.boss.likelyLead}</strong>
         </div>
+      </div>
+
+      <div className="battle-cta">
+        <div>
+          <span>Playable challenge</span>
+          <p>Battle the generated trainer in a deterministic Showdown-backed singles match.</p>
+          {battleError ? <strong>{battleError}</strong> : null}
+        </div>
+        <button type="button" onClick={onStartBattle} disabled={battleBusy}>
+          <Play aria-hidden="true" />
+          {battleBusy ? "Starting" : "Battle trainer"}
+        </button>
       </div>
 
       <section className="section-block">
@@ -181,6 +267,99 @@ function AuditView({audit}: {audit: AuditResult}) {
         </div>
       </section>
     </>
+  );
+}
+
+function BattleView({
+  snapshot,
+  busy,
+  error,
+  onChoose,
+  onReset
+}: {
+  snapshot: BattleSnapshot;
+  busy: boolean;
+  error?: string;
+  onChoose: (choice: string) => void;
+  onReset: () => void;
+}) {
+  return (
+    <>
+      <div className="battle-header">
+        <div>
+          <span>Turn {snapshot.turn || 1}</span>
+          <h2>{snapshot.ended ? (snapshot.winner === "user" ? "You defeated the Nemesis." : "The Nemesis won.") : "Battle in progress"}</h2>
+        </div>
+        <button type="button" onClick={onReset}>
+          <RotateCcw aria-hidden="true" />
+          Audit
+        </button>
+      </div>
+
+      {error ? <div className="battle-error">{error}</div> : null}
+      {snapshot.errors.map((message) => (
+        <div className="battle-error" key={message}>
+          {message}
+        </div>
+      ))}
+
+      <section className="battle-board">
+        <BattleSide title="Nemesis" side={snapshot.opponent} />
+        <BattleSide title="You" side={snapshot.user} />
+      </section>
+
+      <section className="section-block action-panel">
+        <div className="section-heading">
+          <Shield aria-hidden="true" />
+          <h2>Choose Action</h2>
+        </div>
+        <div className="choice-grid">
+          {snapshot.choices.length ? (
+            snapshot.choices.map((choice) => (
+              <button key={choice.id} type="button" onClick={() => onChoose(choice.id)} disabled={busy || choice.disabled}>
+                {choice.kind === "move" ? <Swords aria-hidden="true" /> : <RefreshCcw aria-hidden="true" />}
+                {choice.label}
+              </button>
+            ))
+          ) : (
+            <p>{snapshot.ended ? "Battle complete." : "Waiting for the next legal choice."}</p>
+          )}
+        </div>
+      </section>
+
+      <section className="section-block battle-log">
+        <h2>Battle Log</h2>
+        <ol>
+          {snapshot.log.map((entry) => (
+            <li key={entry.id} className={`log-${entry.kind}`}>
+              {entry.text}
+            </li>
+          ))}
+        </ol>
+      </section>
+    </>
+  );
+}
+
+function BattleSide({title, side}: {title: string; side: BattleSnapshot["user"]}) {
+  const active = side.pokemon.find((pokemon) => pokemon.active);
+
+  return (
+    <article className="battle-side">
+      <div className="battle-side-heading">
+        <span>{title}</span>
+        <strong>{active?.species ?? "No active Pokemon"}</strong>
+        <p>{active?.condition ?? ""}</p>
+      </div>
+      <div className="bench-list">
+        {side.pokemon.map((pokemon) => (
+          <div key={pokemon.ident} className={pokemon.active ? "bench-mon active" : pokemon.fainted ? "bench-mon fainted" : "bench-mon"}>
+            <span>{pokemon.species}</span>
+            <small>{pokemon.condition}</small>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

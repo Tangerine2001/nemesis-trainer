@@ -137,3 +137,58 @@ export interface SharePayload {
   seed: string;
   style: TrainerStyle;
 }
+
+export type BattleChoiceKind = "move" | "switch";
+
+export interface BattleChoice {
+  id: string;
+  label: string;
+  kind: BattleChoiceKind;
+  disabled?: boolean;
+}
+
+export interface BattlePokemonView {
+  ident: string;
+  species: string;
+  condition: string;
+  active: boolean;
+  fainted: boolean;
+  item?: string;
+  ability?: string;
+  teraType?: string;
+  moves: string[];
+}
+
+export interface BattleSideView {
+  name: string;
+  pokemon: BattlePokemonView[];
+}
+
+export interface BattleLogEntry {
+  id: string;
+  text: string;
+  kind: "info" | "turn" | "move" | "switch" | "damage" | "faint" | "end";
+}
+
+export interface BattleSnapshot {
+  turn: number;
+  ended: boolean;
+  winner?: "user" | "nemesis";
+  log: BattleLogEntry[];
+  user: BattleSideView;
+  opponent: BattleSideView;
+  choices: BattleChoice[];
+  errors: string[];
+}
+
+export interface BattleStartRequest extends AuditRequest {}
+
+export interface BattleTurnRequest extends BattleStartRequest {
+  userChoices: string[];
+  choice: string;
+}
+
+export interface BattleResponse {
+  snapshot: BattleSnapshot;
+  userChoices: string[];
+}

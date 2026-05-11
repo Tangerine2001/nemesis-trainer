@@ -32,13 +32,13 @@ const WALLBREAKER_OPTIONS: BossPokemon[] = [
 const SETUP_CORE: BossPokemon[] = [
   {species: "Glimmora", item: "Focus Sash", ability: "Toxic Debris", teraType: "Ghost", role: "hazard lead", moves: ["Stealth Rock", "Spikes", "Mortal Spin", "Earth Power"]},
   {species: "Dragonite", item: "Heavy-Duty Boots", ability: "Multiscale", teraType: "Normal", role: "priority sweeper", moves: ["Dragon Dance", "Extreme Speed", "Earthquake", "Roost"]},
-  {species: "Volcarona", item: "Heavy-Duty Boots", ability: "Flame Body", teraType: "Grass", role: "special sweeper", moves: ["Quiver Dance", "Fiery Dance", "Giga Drain", "Morning Sun"]},
+  {species: "Gholdengo", item: "Air Balloon", ability: "Good as Gold", teraType: "Flying", role: "removal blocker", moves: ["Nasty Plot", "Make It Rain", "Shadow Ball", "Recover"]},
   {species: "Kingambit", item: "Black Glasses", ability: "Supreme Overlord", teraType: "Dark", role: "endgame cleaner", moves: ["Swords Dance", "Kowtow Cleave", "Sucker Punch", "Iron Head"]}
 ];
 
 const SETUP_OPTIONS: BossPokemon[] = [
-  {species: "Baxcalibur", item: "Loaded Dice", ability: "Thermal Exchange", teraType: "Dragon", role: "setup wallbreaker", moves: ["Dragon Dance", "Icicle Spear", "Glaive Rush", "Earthquake"]},
-  {species: "Gholdengo", item: "Air Balloon", ability: "Good as Gold", teraType: "Flying", role: "removal blocker", moves: ["Nasty Plot", "Make It Rain", "Shadow Ball", "Recover"]},
+  {species: "Cloyster", item: "Focus Sash", ability: "Skill Link", teraType: "Ice", role: "shell smash sweeper", moves: ["Shell Smash", "Icicle Spear", "Rock Blast", "Liquidation"]},
+  {species: "Iron Moth", item: "Booster Energy", ability: "Quark Drive", teraType: "Ground", role: "special cleaner", moves: ["Fiery Dance", "Sludge Wave", "Energy Ball", "Dazzling Gleam"]},
   {species: "Raging Bolt", item: "Leftovers", ability: "Protosynthesis", teraType: "Fairy", role: "bulky setup", moves: ["Calm Mind", "Thunderclap", "Dragon Pulse", "Substitute"]}
 ];
 
