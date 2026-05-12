@@ -60,6 +60,12 @@ For interactive battles, prefer:
 
 Decision quality should improve through search depth and heuristic quality, not hidden stat bonuses.
 
+Detailed implementation notes now live in:
+
+- [AI Battler Implementation Plan](ai-battler-implementation-plan.md)
+- [AI Battler Architecture](ai-battler-architecture.md)
+- [AI Battler Heuristics](ai-battler-heuristics.md)
+
 ## Heuristic Factors
 
 Score non-terminal positions using:

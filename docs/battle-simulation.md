@@ -84,3 +84,11 @@ This lets the implementation move between CLI calls, a Node worker, and browser-
 For pages that only need damage ranges, use `@smogon/calc` rather than full battle simulation.
 
 Use full Showdown simulation when turn order, switching, abilities, items, weather, terrain, or multi-turn state matters.
+
+## Interactive Battler Notes
+
+The interactive AI battler should keep using Showdown as the mechanics engine while layering deterministic policy code around it. See:
+
+- [AI Battler Implementation Plan](ai-battler-implementation-plan.md)
+- [AI Battler Architecture](ai-battler-architecture.md)
+- [AI Battler Heuristics](ai-battler-heuristics.md)

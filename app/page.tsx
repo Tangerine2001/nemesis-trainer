@@ -16,6 +16,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [battle, setBattle] = useState<BattleSnapshot | undefined>();
   const [battleChoices, setBattleChoices] = useState<string[]>([]);
+  const [aiBattleChoices, setAiBattleChoices] = useState<string[]>([]);
   const [battleError, setBattleError] = useState<string | undefined>();
   const [battleBusy, setBattleBusy] = useState(false);
 
@@ -57,6 +58,7 @@ export default function Home() {
       const response = await postBattle("/api/battle/start", {rawTeam, seed, style});
       setBattle(response.snapshot);
       setBattleChoices(response.userChoices);
+      setAiBattleChoices(response.aiChoices);
     } catch (error) {
       setBattleError(error instanceof Error ? error.message : "Unable to start battle.");
     } finally {
@@ -68,9 +70,10 @@ export default function Home() {
     setBattleBusy(true);
     setBattleError(undefined);
     try {
-      const response = await postBattle("/api/battle/turn", {rawTeam, seed, style, userChoices: battleChoices, choice});
+      const response = await postBattle("/api/battle/turn", {rawTeam, seed, style, userChoices: battleChoices, aiChoices: aiBattleChoices, choice});
       setBattle(response.snapshot);
       setBattleChoices(response.userChoices);
+      setAiBattleChoices(response.aiChoices);
     } catch (error) {
       setBattleError(error instanceof Error ? error.message : "Unable to advance battle.");
     } finally {
@@ -81,6 +84,7 @@ export default function Home() {
   function resetBattle() {
     setBattle(undefined);
     setBattleChoices([]);
+    setAiBattleChoices([]);
     setBattleError(undefined);
   }
 

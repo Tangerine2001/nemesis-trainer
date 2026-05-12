@@ -185,10 +185,12 @@ export interface BattleStartRequest extends AuditRequest {}
 
 export interface BattleTurnRequest extends BattleStartRequest {
   userChoices: string[];
+  aiChoices?: string[];
   choice: string;
 }
 
 export interface BattleResponse {
   snapshot: BattleSnapshot;
   userChoices: string[];
+  aiChoices: string[];
 }

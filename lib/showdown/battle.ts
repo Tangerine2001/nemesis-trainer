@@ -1,5 +1,8 @@
 import {BattleStream} from "pokemon-showdown/dist/sim/battle-stream";
-import {Dex} from "pokemon-showdown/dist/sim/dex";
+import {basicPolicy} from "@/lib/battle-ai/basic-policy";
+import {greedyPolicy} from "@/lib/battle-ai/greedy-policy";
+import type {AiPokemonRequest, AiRequest} from "@/lib/battle-ai/policy";
+import type {BattlePolicy} from "@/lib/battle-ai/policy";
 import {createAudit} from "@/lib/nemesis";
 import {hashString} from "@/lib/boss-generator/random";
 import {packBossTeam, packUserTeam} from "@/lib/showdown/team";
@@ -15,44 +18,9 @@ import type {
   BattleTurnRequest
 } from "@/lib/types";
 
-interface ShowdownMoveRequest {
-  move: string;
-  id: string;
-  pp: number;
-  maxpp: number;
-  target: string;
-  disabled?: boolean;
-}
-
-interface ShowdownPokemonRequest {
-  ident: string;
-  details: string;
-  condition: string;
-  active?: boolean;
-  item?: string;
-  ability?: string;
-  teraType?: string;
-  moves?: string[];
-}
-
-interface ShowdownSideRequest {
-  name: string;
-  id: "p1" | "p2";
-  pokemon: ShowdownPokemonRequest[];
-}
-
-interface ShowdownRequest {
-  rqid?: number;
-  wait?: boolean;
-  teamPreview?: boolean;
-  forceSwitch?: boolean[];
-  active?: Array<{moves: ShowdownMoveRequest[]; trapped?: boolean}>;
-  side: ShowdownSideRequest;
-}
-
 interface BattleRunState {
-  p1Request?: ShowdownRequest;
-  p2Request?: ShowdownRequest;
+  p1Request?: AiRequest;
+  p2Request?: AiRequest;
   log: BattleLogEntry[];
   turn: number;
   winner?: "user" | "nemesis";
@@ -60,15 +28,27 @@ interface BattleRunState {
   errors: string[];
 }
 
+interface BattleRunOptions {
+  aiChoices?: string[];
+  lockedUserChoices?: number;
+  policy?: BattlePolicy;
+  allowGreedySimulation?: boolean;
+  allowProvidedAiForUnlocked?: boolean;
+}
+
 export async function startBattle(request: BattleStartRequest): Promise<BattleResponse> {
-  return runBattle(request, []);
+  return runBattle(request, [], {policy: greedyPolicy});
 }
 
 export async function takeBattleTurn(request: BattleTurnRequest): Promise<BattleResponse> {
-  return runBattle(request, [...request.userChoices, request.choice]);
+  return runBattle(request, [...request.userChoices, request.choice], {
+    aiChoices: request.aiChoices ?? [],
+    lockedUserChoices: request.userChoices.length,
+    policy: greedyPolicy
+  });
 }
 
-async function runBattle(request: AuditRequest, userChoices: string[]): Promise<BattleResponse> {
+function runBattle(request: AuditRequest, userChoices: string[], options: BattleRunOptions = {}): BattleResponse {
   const audit = createAudit(request);
   const userTeam = packUserTeam(audit.team);
   const bossTeam = packBossTeam(audit.boss.roster, audit.format);
@@ -81,6 +61,7 @@ async function runBattle(request: AuditRequest, userChoices: string[]): Promise<
   if (validationProblems.length) {
     return {
       userChoices: [],
+      aiChoices: [],
       snapshot: emptySnapshot(validationProblems)
     };
   }
@@ -88,46 +69,135 @@ async function runBattle(request: AuditRequest, userChoices: string[]): Promise<
   const stream = new BattleStream({noCatch: true});
   const state: BattleRunState = {log: [], turn: 0, ended: false, errors: []};
   const acceptedChoices: string[] = [];
+  const acceptedAiChoices: string[] = [];
+  const providedAiChoices = options.aiChoices ?? [];
+  const lockedUserChoices = options.lockedUserChoices ?? 0;
+  const policy = options.policy ?? basicPolicy;
+  const allowGreedySimulation = options.allowGreedySimulation ?? true;
+  const allowProvidedAiForUnlocked = options.allowProvidedAiForUnlocked ?? false;
+  let aiChoiceCursor = 0;
 
   writeAndProcess(stream, `>start ${JSON.stringify({formatid: audit.format, seed: seedArray(audit.seed)})}`, state);
   writeAndProcess(stream, `>player p1 ${JSON.stringify({name: "You", team: userTeam.packed})}`, state);
   writeAndProcess(stream, `>player p2 ${JSON.stringify({name: "Nemesis", team: bossTeam.packed})}`, state);
   writeAndProcess(stream, `>p1 ${teamPreviewChoice(userTeam.sets.length)}`, state);
   writeAndProcess(stream, `>p2 ${teamPreviewChoice(bossTeam.sets.length)}`, state);
-  settleAiOnlyChoices(stream, state, audit.seed, acceptedChoices.length);
+  settleAiOnlyChoices(stream, state, audit.seed, acceptedChoices.length, lockedUserChoices > 0);
 
-  for (const choice of userChoices) {
+  for (const [choiceIndex, choice] of userChoices.entries()) {
     if (state.ended) break;
     const legalChoices = buildChoices(state.p1Request);
     if (!legalChoices.some((legalChoice) => legalChoice.id === choice && !legalChoice.disabled)) {
       throw new Error(`Illegal battle choice "${choice}".`);
     }
 
-    const aiChoice = chooseAiChoice(state.p2Request, `${audit.seed}:${acceptedChoices.length}:${choice}`);
+    const userChoicesThroughTurn = [...acceptedChoices, choice];
+    const aiChoice = selectAiChoice(
+      state,
+      `${audit.seed}:${acceptedChoices.length}:${choice}`,
+      choiceIndex < lockedUserChoices,
+      userChoicesThroughTurn
+    );
     writeAndProcess(stream, `>p1 ${choice}`, state);
     if (aiChoice) writeAndProcess(stream, `>p2 ${aiChoice}`, state);
     acceptedChoices.push(choice);
-    settleAiOnlyChoices(stream, state, audit.seed, acceptedChoices.length);
+    settleAiOnlyChoices(stream, state, audit.seed, acceptedChoices.length, choiceIndex < lockedUserChoices);
+  }
+
+  if (aiChoiceCursor < providedAiChoices.length) {
+    throw new Error("Battle replay includes extra recorded AI choices.");
   }
 
   return {
     userChoices: acceptedChoices,
+    aiChoices: acceptedAiChoices,
     snapshot: snapshotFromState(state)
   };
+
+  function selectAiChoice(
+    currentState: BattleRunState,
+    seed: string,
+    locked: boolean,
+    userChoicesForSimulation?: string[]
+  ): string | undefined {
+    const legalChoices = buildChoices(currentState.p2Request);
+    const enabledChoices = legalChoices.filter((choice) => !choice.disabled);
+    if (!enabledChoices.length) return undefined;
+
+    if (aiChoiceCursor < providedAiChoices.length && (locked || allowProvidedAiForUnlocked)) {
+      const recordedChoice = providedAiChoices[aiChoiceCursor];
+      if (!enabledChoices.some((choice) => choice.id === recordedChoice)) {
+        throw new Error(`Recorded AI choice "${recordedChoice}" is no longer legal for this battle replay.`);
+      }
+      aiChoiceCursor += 1;
+      acceptedAiChoices.push(recordedChoice);
+      return recordedChoice;
+    }
+
+    if (locked) {
+      throw new Error("Battle replay is missing a recorded AI choice.");
+    }
+
+    if (aiChoiceCursor < providedAiChoices.length) {
+      throw new Error("Battle replay includes extra recorded AI choices.");
+    }
+
+    const decision = policy.choose({
+      seed,
+      request: currentState.p2Request,
+      snapshot: snapshotFromState(currentState),
+      legalChoices,
+      simulateChoice:
+        allowGreedySimulation && userChoicesForSimulation
+          ? (candidate) =>
+              simulateAiCandidate(request, userChoicesForSimulation, [...acceptedAiChoices, candidate.id], acceptedChoices.length)
+          : undefined
+    });
+
+    const selected = decision.choice?.id;
+    if (!selected || !enabledChoices.some((choice) => choice.id === selected)) {
+      const fallback = basicPolicy.choose({seed, request: currentState.p2Request, snapshot: snapshotFromState(currentState), legalChoices});
+      if (!fallback.choice) return undefined;
+      acceptedAiChoices.push(fallback.choice.id);
+      return fallback.choice.id;
+    }
+
+    acceptedAiChoices.push(selected);
+    return selected;
+  }
+
+  function settleAiOnlyChoices(stream: BattleStream, currentState: BattleRunState, seed: string, turnIndex: number, locked: boolean): void {
+    for (let attempts = 0; attempts < 10; attempts += 1) {
+      if (currentState.ended) return;
+      const userChoices = buildChoices(currentState.p1Request).filter((choice) => !choice.disabled);
+      if (userChoices.length) return;
+
+      const aiChoices = buildChoices(currentState.p2Request).filter((choice) => !choice.disabled);
+      if (!aiChoices.length) return;
+
+      const aiChoice = selectAiChoice(currentState, `${seed}:forced:${turnIndex}:${attempts}`, locked);
+      if (!aiChoice) return;
+      writeAndProcess(stream, `>p2 ${aiChoice}`, currentState);
+    }
+  }
 }
 
-function settleAiOnlyChoices(stream: BattleStream, state: BattleRunState, seed: string, turnIndex: number): void {
-  for (let attempts = 0; attempts < 10; attempts += 1) {
-    if (state.ended) return;
-    const userChoices = buildChoices(state.p1Request).filter((choice) => !choice.disabled);
-    if (userChoices.length) return;
-
-    const aiChoices = buildChoices(state.p2Request).filter((choice) => !choice.disabled);
-    if (!aiChoices.length) return;
-
-    const aiChoice = chooseAiChoice(state.p2Request, `${seed}:forced:${turnIndex}:${attempts}`);
-    if (!aiChoice) return;
-    writeAndProcess(stream, `>p2 ${aiChoice}`, state);
+function simulateAiCandidate(
+  request: AuditRequest,
+  userChoices: string[],
+  aiChoices: string[],
+  lockedUserChoices: number
+): BattleSnapshot | undefined {
+  try {
+    return runBattle(request, userChoices, {
+      aiChoices,
+      lockedUserChoices,
+      policy: basicPolicy,
+      allowGreedySimulation: false,
+      allowProvidedAiForUnlocked: true
+    }).snapshot;
+  } catch {
+    return undefined;
   }
 }
 
@@ -149,7 +219,7 @@ function processOutput(output: string, state: BattleRunState): void {
     const side = rest[0];
     const requestLine = rest.find((line) => line.startsWith("|request|"));
     if (!requestLine) return;
-    const parsed = JSON.parse(requestLine.slice("|request|".length)) as ShowdownRequest;
+    const parsed = JSON.parse(requestLine.slice("|request|".length)) as AiRequest;
     if (side === "p1") state.p1Request = parsed;
     if (side === "p2") state.p2Request = parsed;
     return;
@@ -205,13 +275,14 @@ function processUpdateLines(lines: string[], state: BattleRunState): void {
     } else if (command === "-sideend") {
       addLog(state, `${effectName(parts[3])} ended on ${sideName(parts[2])}.`, "info");
     } else if (command === "-status") {
-      addLog(state, `${pokemonName(parts[2])} was afflicted with ${parts[3]}.`, "info");
-    } else if (command === "-enditem") {
-      addLog(state, `${pokemonName(parts[2])} consumed ${parts[3]}.`, "info");
+      addLog(state, `${pokemonName(parts[2])} was afflicted with ${statusName(parts[3])}.`, "info");
     } else if (command === "-supereffective") {
       addLog(state, `It was super effective against ${pokemonName(parts[2])}.`, "info");
     } else if (command === "-resisted") {
       addLog(state, `${pokemonName(parts[2])} resisted the hit.`, "info");
+    } else if (command?.startsWith("-")) {
+      const formatted = formatProtocolEvent(parts);
+      if (formatted) addLog(state, formatted, protocolEventKind(command));
     } else if (command === "win") {
       state.ended = true;
       state.winner = parts[2] === "You" ? "user" : "nemesis";
@@ -223,7 +294,7 @@ function processUpdateLines(lines: string[], state: BattleRunState): void {
   }
 }
 
-function buildChoices(request?: ShowdownRequest): BattleChoice[] {
+function buildChoices(request?: AiRequest): BattleChoice[] {
   if (!request || request.wait) return [];
 
   if (request.teamPreview) {
@@ -260,40 +331,6 @@ function buildChoices(request?: ShowdownRequest): BattleChoice[] {
   return choices;
 }
 
-function chooseAiChoice(request: ShowdownRequest | undefined, seed: string): string | undefined {
-  const choices = buildChoices(request).filter((choice) => !choice.disabled);
-  if (!choices.length) return undefined;
-  const switches = choices.filter((choice) => choice.kind === "switch");
-  if (request?.forceSwitch?.some(Boolean) && switches.length) return switches[0].id;
-
-  let best = choices[0];
-  let bestScore = Number.NEGATIVE_INFINITY;
-  for (const choice of choices) {
-    const score = scoreChoice(choice, request, seed);
-    if (score > bestScore) {
-      best = choice;
-      bestScore = score;
-    }
-  }
-  return best.id;
-}
-
-function scoreChoice(choice: BattleChoice, request: ShowdownRequest | undefined, seed: string): number {
-  if (choice.kind === "switch") return 10 + tieBreak(seed, choice.id);
-  const moveIndex = Number.parseInt(choice.id.replace("move ", ""), 10) - 1;
-  const moveRequest = request?.active?.[0]?.moves[moveIndex];
-  const move = Dex.moves.get(moveRequest?.id ?? choice.label);
-  const statusBonus = move.category === "Status" ? statusMoveBonus(move.id) : 0;
-  return (move.basePower || 0) + move.priority * 18 + statusBonus + tieBreak(seed, choice.id);
-}
-
-function statusMoveBonus(moveId: string): number {
-  if (["stealthrock", "spikes", "toxicspikes", "stickyweb"].includes(moveId)) return 55;
-  if (["dragondance", "swordsdance", "nastyplot", "calmmind", "shellsmash", "quiverdance", "irondefense"].includes(moveId)) return 45;
-  if (["encore", "taunt", "willowisp", "thunderwave", "substitute"].includes(moveId)) return 35;
-  return 20;
-}
-
 function snapshotFromState(state: BattleRunState): BattleSnapshot {
   return {
     turn: state.turn,
@@ -319,14 +356,14 @@ function emptySnapshot(errors: string[]): BattleSnapshot {
   };
 }
 
-function sideView(request: ShowdownRequest | undefined, fallbackName: string): BattleSideView {
+function sideView(request: AiRequest | undefined, fallbackName: string): BattleSideView {
   return {
     name: request?.side.name ?? fallbackName,
     pokemon: request?.side.pokemon.map(pokemonView) ?? []
   };
 }
 
-function pokemonView(pokemon: ShowdownPokemonRequest): BattlePokemonView {
+function pokemonView(pokemon: AiPokemonRequest): BattlePokemonView {
   return {
     ident: pokemon.ident,
     species: speciesFromDetails(pokemon.details),
@@ -346,16 +383,36 @@ function addLog(state: BattleRunState, text: string, kind: BattleLogEntry["kind"
   state.log.push({id: `${state.log.length + 1}`, text, kind});
 }
 
+function formatProtocolEvent(parts: string[]): string | undefined {
+  const command = parts[1];
+  const target = pokemonName(parts[2]);
+
+  if (command === "-item") return `${target} is holding ${effectName(parts[3])}.`;
+  if (command === "-enditem") return `${target} lost ${effectName(parts[3])}.`;
+  if (command === "-immune") return `${target} was immune.`;
+  if (command === "-miss") return `${pokemonName(parts[2])}'s attack missed ${pokemonName(parts[3])}.`;
+  if (command === "-fail") return `${target}'s ${effectName(parts[3])} failed.`;
+  if (command === "-crit") return `A critical hit landed on ${target}.`;
+  if (command === "-boost") return `${target}'s ${statName(parts[3])} rose by ${parts[4] ?? "1"}.`;
+  if (command === "-unboost") return `${target}'s ${statName(parts[3])} fell by ${parts[4] ?? "1"}.`;
+  if (command === "-activate") return `${target}'s ${effectName(parts[3])} activated.`;
+  if (command === "-start") return `${target} started ${effectName(parts[3])}.`;
+  if (command === "-end") return `${effectName(parts[3])} ended for ${target}.`;
+
+  return undefined;
+}
+
+function protocolEventKind(command: string): BattleLogEntry["kind"] {
+  if (command === "-miss" || command === "-fail" || command === "-immune" || command === "-crit") return "damage";
+  return "info";
+}
+
 function seedArray(seed: string): [number, number, number, number] {
   let state = hashString(seed);
   return [0, 1, 2, 3].map(() => {
     state = Math.imul(state ^ (state >>> 15), 2246822519) >>> 0;
     return state || 1;
   }) as [number, number, number, number];
-}
-
-function tieBreak(seed: string, choice: string): number {
-  return (hashString(`${seed}:${choice}`) % 1000) / 1000;
 }
 
 function teamPreviewChoice(teamSize: number): string {
@@ -378,7 +435,32 @@ function sideName(side?: string): string {
 }
 
 function effectName(effect?: string): string {
-  return effect?.replace(/^move: /, "") ?? "an effect";
+  return effect?.replace(/^(move|item|ability): /, "") ?? "an effect";
+}
+
+function statName(stat?: string): string {
+  const names: Record<string, string> = {
+    atk: "Attack",
+    def: "Defense",
+    spa: "Special Attack",
+    spd: "Special Defense",
+    spe: "Speed",
+    accuracy: "accuracy",
+    evasion: "evasion"
+  };
+  return names[stat ?? ""] ?? stat ?? "stat";
+}
+
+function statusName(status?: string): string {
+  const names: Record<string, string> = {
+    brn: "burn",
+    par: "paralysis",
+    psn: "poison",
+    tox: "bad poison",
+    slp: "sleep",
+    frz: "freeze"
+  };
+  return names[status ?? ""] ?? status ?? "status";
 }
 
 function speciesFromDetails(details: string): string {

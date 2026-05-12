@@ -16,6 +16,9 @@ The site should generate a custom boss trainer that exposes weaknesses in the us
 - [AI trainer strategy](docs/ai-trainer-strategy.md)
 - [Data and content plan](docs/data-and-content.md)
 - [Monetization and risk notes](docs/monetization-and-risk.md)
+- [Backend MVP](docs/backend-mvp.md)
+- [Backend later](docs/backend-later.md)
+- [Backend avoid for now](docs/backend-avoid-for-now.md)
 
 ## Battle Simulation
 
