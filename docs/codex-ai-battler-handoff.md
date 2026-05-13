@@ -1,6 +1,6 @@
 # Codex AI Battler Handoff
 
-Last updated: 2026-05-11
+Last updated: 2026-05-13
 
 This file exists so future Codex sessions can resume AI battler work without reconstructing the current state from chat history.
 
@@ -8,22 +8,13 @@ This file exists so future Codex sessions can resume AI battler work without rec
 
 Branch: `master`
 
-Latest pushed battle commit:
+Latest pushed battle commit before the minimax implementation:
 
 ```text
-239dde4 Add interactive AI trainer battles
+72ef444 Improve deterministic AI battler
 ```
 
-That commit added the first interactive Showdown-backed battle loop.
-
-Known uncommitted local files at the time this handoff was created:
-
-- `README.md`
-- `docs/backend-avoid-for-now.md`
-- `docs/backend-later.md`
-- `docs/backend-mvp.md`
-
-Those were pre-existing/unrelated to the battle AI docs and should not be overwritten casually.
+That commit added the greedy policy boundary, evaluator, AI choice replay tracking, battle log formatting improvements, and AI battler planning docs.
 
 ## Current Battler Capabilities
 
@@ -37,6 +28,8 @@ The app can:
 - handle forced user switches after a faint
 - auto-settle AI-only forced switches after the AI loses a Pokemon
 - reflect Showdown choice-lock behavior in legal move buttons
+- choose live AI trainer actions with default depth-2 minimax
+- fall back to greedy one-ply evaluation and basic rule scoring when search cannot complete
 
 Manual browser smoke already covered:
 
@@ -67,21 +60,24 @@ Full `npm audit` may still report an optional dependency issue through `pokemon-
 
 ## Main AI Limitation
 
-The current AI choice function is basic. It:
+The current AI search is intentionally shallow. It:
 
 - enumerates legal choices from the Showdown request
 - prefers the first legal forced switch when forced
-- scores moves mostly by base power, priority, and a status-move bonus
+- simulates root AI choices through Showdown replay
+- models the next visible user response as the minimizing branch
+- uses the current evaluator for terminal, Pokemon count, HP, active HP, and status scoring
 - uses deterministic seeded tie-breaking
+- stops under node and time budgets
+- falls back to greedy/basic policies when needed
 
 It does not yet:
 
-- simulate candidate actions before choosing
-- model the user's best response
-- evaluate full battle state
-- search multiple plies
-- prune search
-- explain why an action was chosen
+- search beyond the next visible user response
+- use type-matchup, speed, hazard, boost, item, or ability-aware heuristics
+- expose difficulty levels
+- explain AI choices in the UI
+- use a transposition cache
 
 ## Recommended Next Work
 
@@ -93,20 +89,22 @@ Read these docs first:
 - `docs/battle-simulation.md`
 - `docs/ai-trainer-strategy.md`
 
-Then implement the first narrow PR:
+Then improve the evaluator before increasing search depth:
 
-1. Create `lib/battle-ai/policy.ts`.
-2. Move current choice scoring from `lib/showdown/battle.ts` into `lib/battle-ai/basic-policy.ts`.
-3. Keep the battle runner behavior unchanged.
-4. Add tests proving the policy is deterministic.
-5. Create `lib/battle-ai/evaluate.ts` with terminal, Pokemon count, and HP-fraction scoring.
-6. Add synthetic `BattleSnapshot` fixtures for evaluator tests.
+1. Add type-matchup and speed-pressure scoring.
+2. Add hazard, boost/drop, item, and ability signals where the normalized snapshot exposes enough data.
+3. Add decision explanations from the selected policy result.
+4. Add difficulty levels only after depth-2 runtime is stable in browser smoke tests.
 
-Do not start with full minimax. The replay helper and evaluator need to be reliable first.
+Do not raise default depth to 3 until replay runtime has been profiled on several realistic teams.
 
 ## Important Files
 
-- `lib/showdown/battle.ts`: current battle runner and AI choice logic
+- `lib/showdown/battle.ts`: current battle runner, replay, and policy wiring
+- `lib/battle-ai/minimax-policy.ts`: default depth-2 minimax policy
+- `lib/battle-ai/greedy-policy.ts`: one-ply fallback policy
+- `lib/battle-ai/basic-policy.ts`: deterministic fallback policy
+- `lib/battle-ai/evaluate.ts`: normalized snapshot evaluator
 - `lib/showdown/team.ts`: Showdown team packing
 - `lib/types.ts`: battle snapshot and choice types
 - `app/api/battle/start/route.ts`: battle start route

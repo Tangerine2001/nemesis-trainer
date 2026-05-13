@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 import {chooseBasicBattleAction} from "@/lib/battle-ai/basic-policy";
 import {evaluateBattleState} from "@/lib/battle-ai/evaluate";
 import {chooseGreedyBattleAction} from "@/lib/battle-ai/greedy-policy";
+import {chooseMinimaxBattleAction} from "@/lib/battle-ai/minimax-policy";
 import {analyzeTeam} from "@/lib/analysis/analyze";
 import {createAudit} from "@/lib/nemesis";
 import {SAMPLE_TEAM, SLOW_SAMPLE_TEAM} from "@/lib/sample-teams";
@@ -280,6 +281,97 @@ describe("battle AI policies", () => {
 
     expect(decision.choice?.id).toBe("move 2");
     expect(decision.nodesEvaluated).toBe(2);
+  });
+
+  it("uses minimax to take terminal winning outcomes", () => {
+    const choices: BattleChoice[] = [
+      {id: "move 1", label: "Chip hit", kind: "move"},
+      {id: "move 2", label: "Winning hit", kind: "move"}
+    ];
+
+    const decision = chooseMinimaxBattleAction(
+      {
+        seed: "minimax-win",
+        snapshot: battleFixture({user: [], opponent: []}),
+        legalChoices: choices,
+        request: {side: {id: "p2", name: "Nemesis", pokemon: []}},
+        simulateChoice: (choice) =>
+          choice.id === "move 2"
+            ? {...battleFixture({user: [], opponent: []}), ended: true, winner: "nemesis"}
+            : battleFixture({user: [{species: "Dragapult", condition: "80/100", active: true}], opponent: []})
+      },
+      {depth: 2, nodeBudget: 20, timeBudgetMs: 1000}
+    );
+
+    expect(decision.choice?.id).toBe("move 2");
+    expect(decision.reason).toBe("minimax depth 2");
+  });
+
+  it("uses minimax to avoid immediate user punishments", () => {
+    const aiChoices: BattleChoice[] = [
+      {id: "move 1", label: "Risky setup", kind: "move"},
+      {id: "move 2", label: "Safe attack", kind: "move"}
+    ];
+    const userChoices: BattleChoice[] = [
+      {id: "move 1", label: "Punish", kind: "move"},
+      {id: "move 2", label: "Neutral hit", kind: "move"}
+    ];
+    const rootSnapshot = {...battleFixture({user: [], opponent: []}), choices: userChoices};
+
+    const decision = chooseMinimaxBattleAction(
+      {
+        seed: "minimax-punish",
+        snapshot: battleFixture({user: [], opponent: []}),
+        legalChoices: aiChoices,
+        request: {side: {id: "p2", name: "Nemesis", pokemon: []}},
+        simulateChoice: () => rootSnapshot,
+        simulateUserChoice: (aiChoice, userChoice) => {
+          if (aiChoice.id === "move 1" && userChoice.id === "move 1") {
+            return {...battleFixture({user: [], opponent: []}), ended: true, winner: "user"};
+          }
+          if (aiChoice.id === "move 2") {
+            return battleFixture({
+              user: [{species: "Dragapult", condition: "45/100", active: true}],
+              opponent: [{species: "Gholdengo", condition: "100/100", active: true}]
+            });
+          }
+          return battleFixture({
+            user: [{species: "Dragapult", condition: "100/100", active: true}],
+            opponent: [{species: "Gholdengo", condition: "70/100", active: true}]
+          });
+        }
+      },
+      {depth: 2, nodeBudget: 20, timeBudgetMs: 1000}
+    );
+
+    expect(decision.choice?.id).toBe("move 2");
+    expect(decision.nodesEvaluated).toBeGreaterThan(2);
+  });
+
+  it("falls back deterministically when minimax cannot complete within budget", () => {
+    const choices: BattleChoice[] = [
+      {id: "move 1", label: "Weak hit", kind: "move"},
+      {id: "move 2", label: "Winning hit", kind: "move"}
+    ];
+    const userChoices: BattleChoice[] = [{id: "move 1", label: "Reply", kind: "move"}];
+
+    const decision = chooseMinimaxBattleAction(
+      {
+        seed: "minimax-budget",
+        snapshot: battleFixture({user: [], opponent: []}),
+        legalChoices: choices,
+        request: {side: {id: "p2", name: "Nemesis", pokemon: []}},
+        simulateChoice: (choice) =>
+          choice.id === "move 2"
+            ? {...battleFixture({user: [{species: "Dragapult", condition: "0 fnt", active: true, fainted: true}], opponent: []}), choices: userChoices}
+            : {...battleFixture({user: [{species: "Dragapult", condition: "100/100", active: true}], opponent: []}), choices: userChoices},
+        simulateUserChoice: () => battleFixture({user: [], opponent: []})
+      },
+      {depth: 2, nodeBudget: 1, timeBudgetMs: 1000}
+    );
+
+    expect(decision.choice?.id).toBe("move 2");
+    expect(decision.reason).toBe("minimax budget fallback");
   });
 });
 

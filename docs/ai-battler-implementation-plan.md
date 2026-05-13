@@ -13,9 +13,10 @@ The app can already:
 - replay accepted user choices from the initial teams and seed
 - expose legal user choices from Showdown requests
 - handle normal moves, switches, forced user switches, and forced AI switches
-- choose AI actions with a simple deterministic rule-based score
+- choose AI actions with a default depth-2 minimax policy
+- fall back to greedy one-ply evaluation and then basic rule scoring when search cannot complete
 
-The current AI is intentionally shallow. It scores legal moves mostly by base power, priority, and a small status-move bonus. It does not yet simulate alternative futures before choosing.
+The current AI is still intentionally lean. It uses replay-based Showdown simulation for candidate AI choices and the next visible user response, but deeper search and richer heuristics are still future work.
 
 ## Goal
 

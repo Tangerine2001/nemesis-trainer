@@ -1,6 +1,6 @@
 import {BattleStream} from "pokemon-showdown/dist/sim/battle-stream";
 import {basicPolicy} from "@/lib/battle-ai/basic-policy";
-import {greedyPolicy} from "@/lib/battle-ai/greedy-policy";
+import {minimaxPolicy} from "@/lib/battle-ai/minimax-policy";
 import type {AiPokemonRequest, AiRequest} from "@/lib/battle-ai/policy";
 import type {BattlePolicy} from "@/lib/battle-ai/policy";
 import {createAudit} from "@/lib/nemesis";
@@ -32,19 +32,19 @@ interface BattleRunOptions {
   aiChoices?: string[];
   lockedUserChoices?: number;
   policy?: BattlePolicy;
-  allowGreedySimulation?: boolean;
+  allowPolicySimulation?: boolean;
   allowProvidedAiForUnlocked?: boolean;
 }
 
 export async function startBattle(request: BattleStartRequest): Promise<BattleResponse> {
-  return runBattle(request, [], {policy: greedyPolicy});
+  return runBattle(request, [], {policy: minimaxPolicy});
 }
 
 export async function takeBattleTurn(request: BattleTurnRequest): Promise<BattleResponse> {
   return runBattle(request, [...request.userChoices, request.choice], {
     aiChoices: request.aiChoices ?? [],
     lockedUserChoices: request.userChoices.length,
-    policy: greedyPolicy
+    policy: minimaxPolicy
   });
 }
 
@@ -73,7 +73,7 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
   const providedAiChoices = options.aiChoices ?? [];
   const lockedUserChoices = options.lockedUserChoices ?? 0;
   const policy = options.policy ?? basicPolicy;
-  const allowGreedySimulation = options.allowGreedySimulation ?? true;
+  const allowPolicySimulation = options.allowPolicySimulation ?? true;
   const allowProvidedAiForUnlocked = options.allowProvidedAiForUnlocked ?? false;
   let aiChoiceCursor = 0;
 
@@ -148,9 +148,19 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
       snapshot: snapshotFromState(currentState),
       legalChoices,
       simulateChoice:
-        allowGreedySimulation && userChoicesForSimulation
+        allowPolicySimulation && userChoicesForSimulation
           ? (candidate) =>
-              simulateAiCandidate(request, userChoicesForSimulation, [...acceptedAiChoices, candidate.id], acceptedChoices.length)
+              simulateBattleCandidate(request, userChoicesForSimulation, [...acceptedAiChoices, candidate.id], acceptedChoices.length)
+          : undefined,
+      simulateUserChoice:
+        allowPolicySimulation && userChoicesForSimulation
+          ? (aiChoice, userChoice) =>
+              simulateBattleCandidate(
+                request,
+                [...userChoicesForSimulation, userChoice.id],
+                [...acceptedAiChoices, aiChoice.id],
+                acceptedChoices.length
+              )
           : undefined
     });
 
@@ -182,7 +192,7 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
   }
 }
 
-function simulateAiCandidate(
+function simulateBattleCandidate(
   request: AuditRequest,
   userChoices: string[],
   aiChoices: string[],
@@ -193,7 +203,7 @@ function simulateAiCandidate(
       aiChoices,
       lockedUserChoices,
       policy: basicPolicy,
-      allowGreedySimulation: false,
+      allowPolicySimulation: false,
       allowProvidedAiForUnlocked: true
     }).snapshot;
   } catch {

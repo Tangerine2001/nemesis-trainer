@@ -42,6 +42,7 @@ export interface BattlePolicyContext {
   snapshot: BattleSnapshot;
   legalChoices: BattleChoice[];
   simulateChoice?: (choice: BattleChoice) => BattleSnapshot | undefined;
+  simulateUserChoice?: (aiChoice: BattleChoice, userChoice: BattleChoice) => BattleSnapshot | undefined;
 }
 
 export interface BattleDecision {
