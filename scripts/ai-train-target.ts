@@ -19,7 +19,12 @@ async function main(): Promise<void> {
   const elitism = numberArg(args.elitism, 3);
   const tournamentSize = numberArg(args.tournamentSize, 3);
   const teams = loadArenaTeams();
-  const estimatedTasks = Math.max(1, generations * Math.floor(population / 2) * trainChallenges + Math.max(0, generations - 1) * (population - 1));
+  const retainedElites = Math.min(elitism, population);
+  const estimatedTasks = Math.max(
+    1,
+    generations * Math.floor(population / 2) * trainChallenges +
+      Math.max(0, generations - 1) * ((population - 1) + Math.max(0, population - retainedElites))
+  );
   const workers = resolveWorkerCount(args.workers, estimatedTasks);
   const startedAt = Date.now();
 
@@ -38,7 +43,9 @@ async function main(): Promise<void> {
       console.log(
         `Generation ${generation.generation + 1}/${generations}: champion ${generation.champion.id} fitness=${generation.champion.fitness.toFixed(
           2
-        )} matchWinRate=${generation.champion.matchWinRate.toFixed(2)} gameWinRate=${generation.champion.gameWinRate.toFixed(2)} elapsed=${elapsedSeconds}s`
+        )} matchWinRate=${generation.champion.matchWinRate.toFixed(2)} gameWinRate=${generation.champion.gameWinRate.toFixed(
+          2
+        )} doubleWins=${generation.champion.doubleSideWins} splitPairs=${generation.champion.splitPairs} elapsed=${elapsedSeconds}s`
       );
     }
   });
@@ -48,8 +55,9 @@ async function main(): Promise<void> {
   console.log(
     `Champion: ${report.champion.id} fitness=${report.champion.fitness.toFixed(2)} matchWinRate=${report.champion.matchWinRate.toFixed(
       2
-    )} gameWinRate=${report.champion.gameWinRate.toFixed(2)}`
+    )} gameWinRate=${report.champion.gameWinRate.toFixed(2)} doubleWins=${report.champion.doubleSideWins} splitPairs=${report.champion.splitPairs}`
   );
+  console.log(`Best so far: ${report.bestSoFar.id} fitness=${report.bestSoFar.fitness.toFixed(2)}`);
   console.log(`Report: ${path}`);
 }
 

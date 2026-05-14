@@ -29,9 +29,24 @@ export interface TargetTrainingGenomeScore {
   losses: number;
   gameWins: number;
   gameLosses: number;
+  decisiveGameWins: number;
+  splitPairs: number;
+  maxTurnTies: number;
   matchWinRate: number;
   gameWinRate: number;
   qualityDelta: number;
+  scoreBreakdown: TargetTrainingScoreBreakdown;
+}
+
+export interface TargetTrainingScoreBreakdown {
+  doubleSideWinScore: number;
+  gameWinScore: number;
+  splitPairScore: number;
+  tieScore: number;
+  qualityScore: number;
+  lossPenalty: number;
+  maxTurnTiePenalty: number;
+  total: number;
 }
 
 export interface TargetTrainingGenerationReport {
@@ -48,15 +63,19 @@ export interface TargetTrainingRunReport {
   options: Omit<TargetTrainingRunOptions, "onGeneration"> & EvolutionConfig;
   generations: TargetTrainingGenerationReport[];
   champion: TargetTrainingGenomeScore;
+  bestSoFar: TargetTrainingGenomeScore;
 }
 
 export async function runTargetTraining(teams: ArenaTeam[], options: TargetTrainingRunOptions): Promise<TargetTrainingRunReport> {
   const config: EvolutionConfig = {...DEFAULT_EVOLUTION_CONFIG, elitism: 3, ...options};
   let population = initialPopulation(options.seed, config.population);
   const generations: TargetTrainingGenerationReport[] = [];
+  let bestSoFar: TargetTrainingGenomeScore | undefined;
 
   for (let generation = 0; generation < config.generations; generation += 1) {
-    const incumbent = generation > 0 ? population[0] : undefined;
+    const previousElites = generation > 0 ? population.slice(0, Math.min(config.elitism, population.length)) : [];
+    const incumbent = previousElites[0];
+    const eliteIds = new Set(previousElites.map((genome) => genome.id));
     const matches = await runMatchTasks(
       [
         ...createPeerTrainingMatchTasks({
@@ -70,6 +89,12 @@ export async function runTargetTraining(teams: ArenaTeam[], options: TargetTrain
           incumbent,
           challengers: population.filter((genome) => genome.id !== incumbent?.id),
           maxTurns: options.maxTurns
+        }),
+        ...createEliteDefenseMatchTasks({
+          seed: `${options.seed}:generation-${generation}:elite-defense`,
+          elites: previousElites.slice(1),
+          challengers: population.filter((genome) => !eliteIds.has(genome.id)),
+          maxTurns: options.maxTurns
         })
       ],
       teams,
@@ -77,6 +102,7 @@ export async function runTargetTraining(teams: ArenaTeam[], options: TargetTrain
     );
     const scored = scorePeerPopulation(population, matches);
     const champion = scored[0];
+    bestSoFar = selectBetterScore(bestSoFar, champion.score);
 
     generations.push({
       generation,
@@ -96,7 +122,8 @@ export async function runTargetTraining(teams: ArenaTeam[], options: TargetTrain
     trainingMode: "peer-play",
     options: reportOptions(config, options),
     generations,
-    champion
+    champion,
+    bestSoFar: bestSoFar ?? champion
   };
 }
 
@@ -171,6 +198,36 @@ export function createIncumbentDefenseMatchTasks({
   });
 }
 
+export function createEliteDefenseMatchTasks({
+  seed,
+  elites,
+  challengers,
+  maxTurns,
+  maxMatches = challengers.length
+}: {
+  seed: string;
+  elites: HeuristicGenome[];
+  challengers: HeuristicGenome[];
+  maxTurns: number;
+  maxMatches?: number;
+}): ArenaMatchTask[] {
+  if (!elites.length || !challengers.length || maxMatches <= 0) return [];
+  return challengers.slice(0, maxMatches).map((challenger, index) => {
+    const elite = elites[index % elites.length];
+    const flip = index % 2 === 1;
+    const agentA = flip ? elite : challenger;
+    const agentB = flip ? challenger : elite;
+    return {
+      id: `${seed}:match-${index}:${agentA.id}-vs-${agentB.id}`,
+      seed: `${seed}:match-${index}:${agentA.id}:vs:${agentB.id}`,
+      agentA: genomeToTargetVariant(agentA),
+      agentB: genomeToTargetVariant(agentB),
+      maxPairs: 1,
+      maxTurns
+    };
+  });
+}
+
 // Backwards-compatible export for older tests/scripts. These are now peer-play tasks.
 export function createTargetMatchTasks({
   seed,
@@ -209,9 +266,13 @@ function scorePeerGenome(genome: HeuristicGenome, matches: ArenaMatchResultSumma
     losses: 0,
     gameWins: 0,
     gameLosses: 0,
+    decisiveGameWins: 0,
+    splitPairs: 0,
+    maxTurnTies: 0,
     matchWinRate: 0,
     gameWinRate: 0,
-    qualityDelta: 0
+    qualityDelta: 0,
+    scoreBreakdown: emptyScoreBreakdown()
   };
 
   for (const match of matches) {
@@ -226,26 +287,50 @@ function scorePeerGenome(genome: HeuristicGenome, matches: ArenaMatchResultSumma
 
     score.qualityDelta += match.fitness[side] - match.fitness[opposingSide];
     for (const pair of match.pairs) {
+      let sideGameWins = 0;
+      let opposingGameWins = 0;
       for (const game of pair.games) {
-        if (game.winner === side) score.gameWins += 1;
-        else if (game.winner === opposingSide) score.gameLosses += 1;
+        if (game.winner === side) {
+          score.gameWins += 1;
+          score.decisiveGameWins += 1;
+          sideGameWins += 1;
+        } else if (game.winner === opposingSide) {
+          score.gameLosses += 1;
+          opposingGameWins += 1;
+        } else if (isMaxTurnTie(game)) {
+          score.maxTurnTies += 1;
+        }
       }
+      if (sideGameWins > 0 && opposingGameWins > 0) score.splitPairs += 1;
     }
   }
 
   const totalGames = score.gameWins + score.gameLosses;
   score.matchWinRate = score.matches ? round(score.doubleSideWins / score.matches) : 0;
   score.gameWinRate = totalGames ? round(score.gameWins / totalGames) : 0;
-  score.fitness = peerFitness(score);
+  score.scoreBreakdown = peerFitnessBreakdown(score);
+  score.fitness = score.scoreBreakdown.total;
   return score;
 }
 
-function peerFitness(score: TargetTrainingGenomeScore): number {
-  const matchWinScore = score.doubleSideWins * 2_000 + score.matchWinRate * 1_000;
-  const gameWinScore = score.gameWins * 160 + score.gameWinRate * 700;
-  const tieScore = score.sharedTies * 400;
-  const lossPenalty = score.losses * 1_200 + score.gameLosses * 110;
-  return round(matchWinScore + gameWinScore + tieScore + score.qualityDelta * 0.25 - lossPenalty);
+function peerFitnessBreakdown(score: TargetTrainingGenomeScore): TargetTrainingScoreBreakdown {
+  const doubleSideWinScore = score.doubleSideWins * 3_000 + score.matchWinRate * 1_500;
+  const gameWinScore = score.decisiveGameWins * 220 + score.gameWinRate * 800;
+  const splitPairScore = score.splitPairs * 320;
+  const tieScore = score.sharedTies * 120;
+  const qualityScore = score.qualityDelta * 0.35;
+  const lossPenalty = score.losses * 1_500 + score.gameLosses * 130;
+  const maxTurnTiePenalty = score.maxTurnTies * 80;
+  return {
+    doubleSideWinScore: round(doubleSideWinScore),
+    gameWinScore: round(gameWinScore),
+    splitPairScore: round(splitPairScore),
+    tieScore: round(tieScore),
+    qualityScore: round(qualityScore),
+    lossPenalty: round(lossPenalty),
+    maxTurnTiePenalty: round(maxTurnTiePenalty),
+    total: round(doubleSideWinScore + gameWinScore + splitPairScore + tieScore + qualityScore - lossPenalty - maxTurnTiePenalty)
+  };
 }
 
 function genomeToTargetVariant(genome: HeuristicGenome): ArenaSerializableVariant {
@@ -265,6 +350,7 @@ function nextTargetPopulation(
   const next = scored.slice(0, config.elitism).map((entry) => ({id: entry.genome.id, weights: entry.genome.weights}));
   while (next.length < config.population) {
     const childIndex = next.length;
+    const childId = `child-${seed.split(":").at(-1) ?? "generation"}-${childIndex}`;
     const left = selectParent(
       scored.map((entry) => ({genome: entry.genome, fitness: entry.score.fitness})),
       `${seed}:parent-left:${childIndex}`,
@@ -275,8 +361,8 @@ function nextTargetPopulation(
       `${seed}:parent-right:${childIndex}`,
       config.tournamentSize
     );
-    const crossed = crossoverGenomes(left, right, `${seed}:crossover:${childIndex}`, `target-${seed.split(":").at(-1)}-${childIndex}`);
-    next.push(mutateGenome(crossed, `${seed}:mutation:${childIndex}`, config.mutationRate, crossed.id));
+    const crossed = crossoverGenomes(left, right, `${seed}:crossover:${childIndex}`, childId);
+    next.push(mutateGenome(crossed, `${seed}:mutation:${childIndex}`, config.mutationRate, childId));
   }
   return next;
 }
@@ -299,6 +385,28 @@ function sideForGenome(match: ArenaMatchResultSummary, genomeId: string): ArenaA
 
 function oppositeAgent(side: ArenaAgentId): ArenaAgentId {
   return side === "agentA" ? "agentB" : "agentA";
+}
+
+function isMaxTurnTie(game: ArenaMatchResultSummary["pairs"][number]["games"][number]): boolean {
+  return game.winner === "tie" && game.errors.some((error) => error.includes("Reached max turn limit"));
+}
+
+function emptyScoreBreakdown(): TargetTrainingScoreBreakdown {
+  return {
+    doubleSideWinScore: 0,
+    gameWinScore: 0,
+    splitPairScore: 0,
+    tieScore: 0,
+    qualityScore: 0,
+    lossPenalty: 0,
+    maxTurnTiePenalty: 0,
+    total: 0
+  };
+}
+
+function selectBetterScore(left: TargetTrainingGenomeScore | undefined, right: TargetTrainingGenomeScore): TargetTrainingGenomeScore {
+  if (!left) return right;
+  return right.fitness > left.fitness || (right.fitness === left.fitness && right.id.localeCompare(left.id) < 0) ? right : left;
 }
 
 function round(value: number): number {

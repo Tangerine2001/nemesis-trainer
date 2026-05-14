@@ -55,11 +55,14 @@ Candidate selection uses a combined peer metric:
 - individual game wins
 - match win rate
 - game win rate
+- split-pair wins when swapped games are divided
 - shared ties
 - battle-quality fitness delta from the arena scorer
-- losses and game losses as penalties
+- losses, game losses, and max-turn ties as penalties
 
-There is no fixed benchmark in the evolutionary loop. Elites from the current peer-play standings progress to the next generation. From the second generation onward, the previous generation's champion is retained as the incumbent candidate and every challenger also plays an incumbent-defense match, so new champions have to beat or displace prior strong candidates. Training is report-only. Do not personally battle a champion in the browser unless the user explicitly asks for that final validation step.
+Reports include a `scoreBreakdown` for each genome so training runs show whether selection pressure came from strict double-side wins, split pairs, game wins, quality delta, or penalties. Reports also include `bestSoFar` for observability, while the run champion remains the winner of the final generation's peer-play standings.
+
+There is no fixed benchmark in the evolutionary loop. Elites from the current peer-play standings progress to the next generation. From the second generation onward, the previous generation's champion is retained as the incumbent candidate and every challenger also plays an incumbent-defense match. Non-elite challengers also play a capped elite-defense match against one of the other retained elites when available, so new champions have to beat or displace prior strong candidates. Training is report-only. Do not personally battle a champion in the browser unless the user explicitly asks for that final validation step.
 
 ## Parallelism
 

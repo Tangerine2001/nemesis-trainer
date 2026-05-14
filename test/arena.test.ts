@@ -6,7 +6,12 @@ import {createArenaTasks} from "@/lib/battle-ai/arena/report";
 import {loadArenaTeams} from "@/lib/battle-ai/arena/team-pool";
 import {runMatchTasks} from "@/lib/battle-ai/arena/worker-pool";
 import {crossoverGenomes, initialPopulation, mutateGenome} from "@/lib/battle-ai/evolution/genome";
-import {createIncumbentDefenseMatchTasks, createTargetMatchTasks, scorePeerPopulation} from "@/lib/battle-ai/evolution/target-training";
+import {
+  createEliteDefenseMatchTasks,
+  createIncumbentDefenseMatchTasks,
+  createTargetMatchTasks,
+  scorePeerPopulation
+} from "@/lib/battle-ai/evolution/target-training";
 import type {AiRequest} from "@/lib/battle-ai/policy";
 import type {ArenaGameResult, ArenaMatchResultSummary, ArenaSerializableVariant} from "@/lib/battle-ai/arena/types";
 import type {BattleSnapshot} from "@/lib/types";
@@ -127,6 +132,19 @@ describe("targeted AI training", () => {
     expect(tasks.every((task) => task.agentA.id !== task.agentB.id)).toBe(true);
   });
 
+  it("builds capped elite-defense peer matches", () => {
+    const genomes = initialPopulation("elite-seed", 6);
+    const elites = genomes.slice(0, 2);
+    const challengers = genomes.slice(2);
+    const first = createEliteDefenseMatchTasks({seed: "elite", elites, challengers, maxTurns: 12, maxMatches: 3});
+    const second = createEliteDefenseMatchTasks({seed: "elite", elites, challengers, maxTurns: 12, maxMatches: 3});
+
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(3);
+    expect(first.every((task) => elites.some((elite) => task.agentA.id === elite.id || task.agentB.id === elite.id))).toBe(true);
+    expect(first.every((task) => task.agentA.id !== task.agentB.id)).toBe(true);
+  });
+
   it("scores peer candidates by match wins and game wins", () => {
     const genomes = initialPopulation("peer-score-seed", 2);
     const [left, right] = genomes;
@@ -139,9 +157,55 @@ describe("targeted AI training", () => {
     const leftScore = scored.find((entry) => entry.genome.id === left.id)?.score;
     const rightScore = scored.find((entry) => entry.genome.id === right.id)?.score;
 
-    expect(leftScore).toMatchObject({matches: 3, doubleSideWins: 1, sharedTies: 1, losses: 1, gameWins: 3, gameLosses: 3});
-    expect(rightScore).toMatchObject({matches: 3, doubleSideWins: 1, sharedTies: 1, losses: 1, gameWins: 3, gameLosses: 3});
+    expect(leftScore).toMatchObject({
+      matches: 3,
+      doubleSideWins: 1,
+      sharedTies: 1,
+      losses: 1,
+      gameWins: 3,
+      gameLosses: 3,
+      decisiveGameWins: 3,
+      splitPairs: 1
+    });
+    expect(rightScore).toMatchObject({
+      matches: 3,
+      doubleSideWins: 1,
+      sharedTies: 1,
+      losses: 1,
+      gameWins: 3,
+      gameLosses: 3,
+      decisiveGameWins: 3,
+      splitPairs: 1
+    });
+    expect(leftScore?.scoreBreakdown.total).toBe(leftScore?.fitness);
     expect(scored[0].score.fitness).toBeGreaterThan(0);
+  });
+
+  it("ranks double-side wins above split-pair performance", () => {
+    const genomes = initialPopulation("double-rank-seed", 3);
+    const [doubleWinner, splitWinner, opponent] = genomes;
+    const scored = scorePeerPopulation(genomes, [
+      peerMatch("double", doubleWinner.id, opponent.id, "agentA", ["agentA", "agentA"]),
+      peerMatch("split", splitWinner.id, opponent.id, "shared-win-tie", ["agentA", "agentB"])
+    ]);
+
+    expect(scored[0].genome.id).toBe(doubleWinner.id);
+    expect(scored.find((entry) => entry.genome.id === doubleWinner.id)?.score.doubleSideWins).toBe(1);
+    expect(scored.find((entry) => entry.genome.id === splitWinner.id)?.score.splitPairs).toBe(1);
+  });
+
+  it("scores split pairs above max-turn ties when no double-side wins exist", () => {
+    const genomes = initialPopulation("split-rank-seed", 3);
+    const [splitCandidate, maxTurnCandidate, opponent] = genomes;
+    const scored = scorePeerPopulation(genomes, [
+      peerMatch("split", splitCandidate.id, opponent.id, "shared-win-tie", ["agentA", "agentB"]),
+      peerMatch("max-turn", maxTurnCandidate.id, opponent.id, "shared-win-tie", ["tie", "tie"], {maxTurnTie: true})
+    ]);
+
+    expect(scored.findIndex((entry) => entry.genome.id === splitCandidate.id)).toBeLessThan(
+      scored.findIndex((entry) => entry.genome.id === maxTurnCandidate.id)
+    );
+    expect(scored.find((entry) => entry.genome.id === maxTurnCandidate.id)?.score.maxTurnTies).toBe(2);
   });
 });
 
@@ -217,7 +281,8 @@ function peerMatch(
   agentAId: string,
   agentBId: string,
   result: ArenaMatchResultSummary["result"],
-  gameWinners: Array<"agentA" | "agentB" | "tie">
+  gameWinners: Array<"agentA" | "agentB" | "tie">,
+  options: {maxTurnTie?: boolean} = {}
 ): ArenaMatchResultSummary {
   return {
     id,
@@ -230,21 +295,21 @@ function peerMatch(
         id: `${id}:pair`,
         teamA: "team-a",
         teamB: "team-b",
-        games: [peerGame(id, 0, gameWinners[0]), peerGame(id, 1, gameWinners[1])]
+        games: [peerGame(id, 0, gameWinners[0], options), peerGame(id, 1, gameWinners[1], options)]
       }
     ],
     fitness: {agentA: result === "agentA" ? 1000 : 250, agentB: result === "agentB" ? 1000 : 250}
   };
 }
 
-function peerGame(id: string, index: number, winner: ArenaGameResult["winner"]): ArenaGameResult {
+function peerGame(id: string, index: number, winner: ArenaGameResult["winner"], options: {maxTurnTie?: boolean} = {}): ArenaGameResult {
   return {
     id: `${id}:game-${index}`,
     seed: `${id}:game-${index}`,
     winner,
-    turns: 10,
+    turns: options.maxTurnTie ? 51 : 10,
     fallbackChoices: 0,
-    errors: [],
+    errors: options.maxTurnTie ? ["Reached max turn limit 50."] : [],
     agents: [],
     choices: [],
     final: {
