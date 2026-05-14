@@ -54,7 +54,7 @@ npm run typecheck
 npm run build
 npm run ai:arena -- --seed smoke --rounds 2 --workers 2
 npm run ai:evolve -- --seed smoke --generations 1 --population 4 --workers 2
-npm run ai:train-target -- --seed smoke-target --generations 1 --population 4 --trainChallenges 2 --holdoutChallenges 2 --workers 2 --maxTurns 8
+npm run ai:train-target -- --seed smoke-target --generations 1 --population 4 --trainChallenges 2 --workers 2 --maxTurns 8
 ```
 
 All three passed after the interactive battle implementation and forced-switch fix.
@@ -113,7 +113,7 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 - `lib/battle-ai/evaluate.ts`: normalized snapshot evaluator
 - `lib/battle-ai/arena/`: internal AI-vs-AI arena and report helpers
 - `lib/battle-ai/evolution/`: genetic algorithm for evaluator weights
-- `scripts/ai-train-target.ts`: report-only targeted trainer for beating `minimax-default`
+- `scripts/ai-train-target.ts`: report-only peer-play trainer for evolving evaluator weights through candidate-vs-candidate battles
 - `data/ai-arena/teams/`: curated 10-team Smogon SV OU arena pool plus source notes
 - `lib/showdown/team.ts`: Showdown team packing
 - `lib/types.ts`: battle snapshot and choice types
@@ -133,7 +133,7 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 ## Known Caveats
 
 - Search may be slow if implemented with naive full replay and high depth.
-- Arena simulation now caches request normalization and replay prefixes, but full Showdown replay is still the dominant cost for long target-training runs.
+- Arena simulation now caches request normalization and replay prefixes, but full Showdown replay is still the dominant cost for long peer-play training runs.
 - The evaluator will initially be imperfect; keep it small and testable.
 - Showdown protocol parsing may need more events as the UI and evaluator become richer.
 - Battle logs currently simplify some item-removal messages.

@@ -14,14 +14,12 @@ async function main(): Promise<void> {
   const generations = numberArg(args.generations, 20);
   const population = numberArg(args.population, 24);
   const trainChallenges = numberArg(args.trainChallenges, 10);
-  const holdoutChallenges = numberArg(args.holdoutChallenges, 10);
-  const targetWins = numberArg(args.targetWins, 8);
   const maxTurns = numberArg(args.maxTurns, 120);
   const mutationRate = numberArg(args.mutationRate, 0.18);
   const elitism = numberArg(args.elitism, 3);
   const tournamentSize = numberArg(args.tournamentSize, 3);
   const teams = loadArenaTeams();
-  const estimatedTasks = Math.max(1, generations * population * trainChallenges + holdoutChallenges);
+  const estimatedTasks = Math.max(1, generations * Math.floor(population / 2) * trainChallenges + Math.max(0, generations - 1) * (population - 1));
   const workers = resolveWorkerCount(args.workers, estimatedTasks);
   const startedAt = Date.now();
 
@@ -35,22 +33,23 @@ async function main(): Promise<void> {
     workers,
     maxTurns,
     trainChallenges,
-    holdoutChallenges,
-    targetWins,
     onGeneration(generation) {
       const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       console.log(
         `Generation ${generation.generation + 1}/${generations}: champion ${generation.champion.id} fitness=${generation.champion.fitness.toFixed(
           2
-        )} elapsed=${elapsedSeconds}s`
+        )} matchWinRate=${generation.champion.matchWinRate.toFixed(2)} gameWinRate=${generation.champion.gameWinRate.toFixed(2)} elapsed=${elapsedSeconds}s`
       );
     }
   });
   const path = writeArenaReport(report, "target-training", seed);
 
-  console.log(`Target training complete: ${generations} generation(s), population ${population}, ${workers} worker(s)`);
-  console.log(`Champion: ${report.champion.id} fitness=${report.champion.fitness.toFixed(2)}`);
-  console.log(`Holdout: ${report.holdout.candidateWins}/${holdoutChallenges} double-side wins ${report.holdout.pass ? "PASS" : "FAIL"}`);
+  console.log(`Peer-play training complete: ${generations} generation(s), population ${population}, ${workers} worker(s)`);
+  console.log(
+    `Champion: ${report.champion.id} fitness=${report.champion.fitness.toFixed(2)} matchWinRate=${report.champion.matchWinRate.toFixed(
+      2
+    )} gameWinRate=${report.champion.gameWinRate.toFixed(2)}`
+  );
   console.log(`Report: ${path}`);
 }
 

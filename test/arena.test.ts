@@ -6,9 +6,9 @@ import {createArenaTasks} from "@/lib/battle-ai/arena/report";
 import {loadArenaTeams} from "@/lib/battle-ai/arena/team-pool";
 import {runMatchTasks} from "@/lib/battle-ai/arena/worker-pool";
 import {crossoverGenomes, initialPopulation, mutateGenome} from "@/lib/battle-ai/evolution/genome";
-import {countCandidateDoubleSideWins, createTargetMatchTasks, summarizeHoldout} from "@/lib/battle-ai/evolution/target-training";
+import {createIncumbentDefenseMatchTasks, createTargetMatchTasks, scorePeerPopulation} from "@/lib/battle-ai/evolution/target-training";
 import type {AiRequest} from "@/lib/battle-ai/policy";
-import type {ArenaMatchResultSummary, ArenaSerializableVariant} from "@/lib/battle-ai/arena/types";
+import type {ArenaGameResult, ArenaMatchResultSummary, ArenaSerializableVariant} from "@/lib/battle-ai/arena/types";
 import type {BattleSnapshot} from "@/lib/types";
 
 describe("AI arena", () => {
@@ -105,33 +105,43 @@ describe("heuristic evolution", () => {
 });
 
 describe("targeted AI training", () => {
-  it("builds deterministic candidate-vs-default target tasks", () => {
-    const genomes = initialPopulation("target-task-seed", 2);
+  it("builds deterministic candidate-vs-candidate target tasks", () => {
+    const genomes = initialPopulation("target-task-seed", 4);
     const first = createTargetMatchTasks({seed: "target", genomes, challenges: 3, maxTurns: 12});
     const second = createTargetMatchTasks({seed: "target", genomes, challenges: 3, maxTurns: 12});
 
     expect(first).toEqual(second);
     expect(first).toHaveLength(6);
-    expect(first.every((task) => task.agentA.kind === "minimax" && task.agentB.id === "minimax-default")).toBe(true);
+    expect(first.every((task) => task.agentA.kind === "minimax" && task.agentB.kind === "minimax")).toBe(true);
+    expect(first.every((task) => task.agentA.id !== task.agentB.id)).toBe(true);
     expect(first.every((task) => task.maxPairs === 1)).toBe(true);
   });
 
-  it("counts only candidate double-side holdout wins toward the target", () => {
-    const matches = [
-      targetMatch("candidate-win", "agentA"),
-      targetMatch("benchmark-win", "agentB"),
-      targetMatch("shared", "shared-win-tie"),
-      targetMatch("candidate-win-2", "agentA")
-    ];
+  it("builds direct incumbent-defense peer matches", () => {
+    const genomes = initialPopulation("incumbent-seed", 4);
+    const [incumbent, ...challengers] = genomes;
+    const tasks = createIncumbentDefenseMatchTasks({seed: "incumbent", incumbent, challengers, maxTurns: 12});
 
-    expect(countCandidateDoubleSideWins(matches)).toBe(2);
-    expect(summarizeHoldout(matches, 3)).toMatchObject({
-      candidateWins: 2,
-      benchmarkWins: 1,
-      sharedTies: 1,
-      pass: false
-    });
-    expect(summarizeHoldout(matches, 2).pass).toBe(true);
+    expect(tasks).toHaveLength(3);
+    expect(tasks.every((task) => task.agentA.id === incumbent.id || task.agentB.id === incumbent.id)).toBe(true);
+    expect(tasks.every((task) => task.agentA.id !== task.agentB.id)).toBe(true);
+  });
+
+  it("scores peer candidates by match wins and game wins", () => {
+    const genomes = initialPopulation("peer-score-seed", 2);
+    const [left, right] = genomes;
+    const matches = [
+      peerMatch("left-win", left.id, right.id, "agentA", ["agentA", "agentA"]),
+      peerMatch("right-split", left.id, right.id, "shared-win-tie", ["agentB", "agentA"]),
+      peerMatch("right-win", right.id, left.id, "agentA", ["agentA", "agentA"])
+    ];
+    const scored = scorePeerPopulation(genomes, matches);
+    const leftScore = scored.find((entry) => entry.genome.id === left.id)?.score;
+    const rightScore = scored.find((entry) => entry.genome.id === right.id)?.score;
+
+    expect(leftScore).toMatchObject({matches: 3, doubleSideWins: 1, sharedTies: 1, losses: 1, gameWins: 3, gameLosses: 3});
+    expect(rightScore).toMatchObject({matches: 3, doubleSideWins: 1, sharedTies: 1, losses: 1, gameWins: 3, gameLosses: 3});
+    expect(scored[0].score.fitness).toBeGreaterThan(0);
   });
 });
 
@@ -202,14 +212,44 @@ function arenaRequestFixture(): AiRequest {
   };
 }
 
-function targetMatch(id: string, result: ArenaMatchResultSummary["result"]): ArenaMatchResultSummary {
+function peerMatch(
+  id: string,
+  agentAId: string,
+  agentBId: string,
+  result: ArenaMatchResultSummary["result"],
+  gameWinners: Array<"agentA" | "agentB" | "tie">
+): ArenaMatchResultSummary {
   return {
     id,
     seed: id,
-    agentA: {id: "candidate", kind: "minimax"},
-    agentB: {id: "minimax-default", kind: "minimax"},
+    agentA: {id: agentAId, kind: "minimax"},
+    agentB: {id: agentBId, kind: "minimax"},
     result,
-    pairs: [],
-    fitness: {agentA: result === "agentA" ? 1000 : 0, agentB: result === "agentB" ? 1000 : 0}
+    pairs: [
+      {
+        id: `${id}:pair`,
+        teamA: "team-a",
+        teamB: "team-b",
+        games: [peerGame(id, 0, gameWinners[0]), peerGame(id, 1, gameWinners[1])]
+      }
+    ],
+    fitness: {agentA: result === "agentA" ? 1000 : 250, agentB: result === "agentB" ? 1000 : 250}
+  };
+}
+
+function peerGame(id: string, index: number, winner: ArenaGameResult["winner"]): ArenaGameResult {
+  return {
+    id: `${id}:game-${index}`,
+    seed: `${id}:game-${index}`,
+    winner,
+    turns: 10,
+    fallbackChoices: 0,
+    errors: [],
+    agents: [],
+    choices: [],
+    final: {
+      agentA: {remainingPokemon: winner === "agentA" ? 3 : 2, hpFraction: winner === "agentA" ? 2.5 : 1.2},
+      agentB: {remainingPokemon: winner === "agentB" ? 3 : 2, hpFraction: winner === "agentB" ? 2.5 : 1.2}
+    }
   };
 }

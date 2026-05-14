@@ -43,13 +43,23 @@ The genetic algorithm evolves evaluator weights only:
 
 It does not evolve teams, movesets, legality, hidden boosts, or Showdown mechanics.
 
-## Targeted Training
+## Peer-Play Training
 
-`npm run ai:train-target` trains minimax evaluator weights against the fixed `minimax-default` benchmark. The target gate is 8 candidate double-side wins out of 10 holdout swapped-pair challenges.
+`npm run ai:train-target` trains minimax evaluator weights through candidate-vs-candidate peer play. The command name is historical; the training mode in new reports is `peer-play`.
 
-Each target challenge is exactly one swapped team pair: game one uses the sampled team assignment, then game two swaps sides and teams. The candidate only gets a holdout win if it wins both games. Split pairs, shared ties, benchmark double-side wins, errors, and max-turn draws do not count toward the 8/10 pass threshold.
+Each training challenge is exactly one swapped team pair between two candidates: game one uses the sampled team assignment, then game two swaps sides and teams. A candidate only gets a double-side match win if it wins both games. Split pairs and max-turn draws are shared ties.
 
-Targeted training is report-only. A passing champion should not be promoted directly to the live battler until several seeds pass and browser smoke tests show better practical play.
+Candidate selection uses a combined peer metric:
+
+- double-side match wins
+- individual game wins
+- match win rate
+- game win rate
+- shared ties
+- battle-quality fitness delta from the arena scorer
+- losses and game losses as penalties
+
+There is no fixed benchmark in the evolutionary loop. Elites from the current peer-play standings progress to the next generation. From the second generation onward, the previous generation's champion is retained as the incumbent candidate and every challenger also plays an incumbent-defense match, so new champions have to beat or displace prior strong candidates. Training is report-only. Do not personally battle a champion in the browser unless the user explicitly asks for that final validation step.
 
 ## Parallelism
 

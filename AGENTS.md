@@ -58,6 +58,17 @@ Preferred baseline:
 
 ML can be explored later, but it should build on top of a correct Showdown-backed simulator and a strong deterministic baseline.
 
+## AI Training Rule
+
+Evolutionary AI training should be candidate-vs-candidate peer play.
+
+- Do not train candidates against a fixed benchmark as the main fitness gate.
+- Within each generation, candidates should battle other candidates using deterministic seeded matchups.
+- Selection should be based on peer-play performance, with a metric that accounts for double-side match wins, game wins, win rates, and battle-quality fitness.
+- Strong candidates should progress through normal elitism so each generation has to beat or displace the previous generation's best candidates.
+- A previous champion may be retained as an incumbent candidate and challenged directly by the next generation, but it should not be treated as an external benchmark.
+- Do not personally battle the final trained champion automatically. Manual browser battles should happen only after the user explicitly asks for that validation step.
+
 ## Engineering Guidance
 
 - Use Pokemon Showdown-compatible team import/export formats.
