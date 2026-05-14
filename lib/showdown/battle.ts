@@ -1,7 +1,9 @@
 import {BattleStream} from "pokemon-showdown/dist/sim/battle-stream";
 import {basicPolicy} from "@/lib/battle-ai/basic-policy";
+import {createEvaluator} from "@/lib/battle-ai/evaluate";
 import {minimaxPolicy} from "@/lib/battle-ai/minimax-policy";
 import type {AiPokemonRequest, AiRequest} from "@/lib/battle-ai/policy";
+import type {BattleEvaluator} from "@/lib/battle-ai/evaluate";
 import type {BattlePolicy} from "@/lib/battle-ai/policy";
 import {createAudit} from "@/lib/nemesis";
 import {hashString} from "@/lib/boss-generator/random";
@@ -32,19 +34,21 @@ interface BattleRunOptions {
   aiChoices?: string[];
   lockedUserChoices?: number;
   policy?: BattlePolicy;
+  evaluator?: BattleEvaluator;
   allowPolicySimulation?: boolean;
   allowProvidedAiForUnlocked?: boolean;
 }
 
 export async function startBattle(request: BattleStartRequest): Promise<BattleResponse> {
-  return runBattle(request, [], {policy: minimaxPolicy});
+  return runBattle(request, [], {policy: minimaxPolicy, evaluator: request.aiWeights ? createEvaluator(request.aiWeights) : undefined});
 }
 
 export async function takeBattleTurn(request: BattleTurnRequest): Promise<BattleResponse> {
   return runBattle(request, [...request.userChoices, request.choice], {
     aiChoices: request.aiChoices ?? [],
     lockedUserChoices: request.userChoices.length,
-    policy: minimaxPolicy
+    policy: minimaxPolicy,
+    evaluator: request.aiWeights ? createEvaluator(request.aiWeights) : undefined
   });
 }
 
@@ -73,6 +77,7 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
   const providedAiChoices = options.aiChoices ?? [];
   const lockedUserChoices = options.lockedUserChoices ?? 0;
   const policy = options.policy ?? basicPolicy;
+  const evaluator = options.evaluator;
   const allowPolicySimulation = options.allowPolicySimulation ?? true;
   const allowProvidedAiForUnlocked = options.allowProvidedAiForUnlocked ?? false;
   let aiChoiceCursor = 0;
@@ -144,6 +149,7 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
 
     const decision = policy.choose({
       seed,
+      evaluator,
       request: currentState.p2Request,
       snapshot: snapshotFromState(currentState),
       legalChoices,

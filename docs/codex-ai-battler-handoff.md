@@ -52,9 +52,14 @@ Use:
 npm run test
 npm run typecheck
 npm run build
+npm run ai:arena -- --seed smoke --rounds 2 --workers 2
+npm run ai:evolve -- --seed smoke --generations 1 --population 4 --workers 2
+npm run ai:train-target -- --seed smoke-target --generations 1 --population 4 --trainChallenges 2 --holdoutChallenges 2 --workers 2 --maxTurns 8
 ```
 
 All three passed after the interactive battle implementation and forced-switch fix.
+
+Arena and target-training reports now include perf counters for elapsed time, replay count, replay-cache hits, snapshots, and compact choice builds. Use those counters when comparing optimization work; do not infer improvement from wall time alone on a busy machine.
 
 Full `npm audit` may still report an optional dependency issue through `pokemon-showdown` and `node-static`. `npm audit --omit=optional --audit-level=moderate` was clean at the time of implementation.
 
@@ -95,6 +100,7 @@ Then improve the evaluator before increasing search depth:
 2. Add hazard, boost/drop, item, and ability signals where the normalized snapshot exposes enough data.
 3. Add decision explanations from the selected policy result.
 4. Add difficulty levels only after depth-2 runtime is stable in browser smoke tests.
+5. Use `docs/ai-arena-and-evolution.md` to compare heuristic changes before promoting them.
 
 Do not raise default depth to 3 until replay runtime has been profiled on several realistic teams.
 
@@ -105,6 +111,10 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 - `lib/battle-ai/greedy-policy.ts`: one-ply fallback policy
 - `lib/battle-ai/basic-policy.ts`: deterministic fallback policy
 - `lib/battle-ai/evaluate.ts`: normalized snapshot evaluator
+- `lib/battle-ai/arena/`: internal AI-vs-AI arena and report helpers
+- `lib/battle-ai/evolution/`: genetic algorithm for evaluator weights
+- `scripts/ai-train-target.ts`: report-only targeted trainer for beating `minimax-default`
+- `data/ai-arena/teams/`: curated 10-team Smogon SV OU arena pool plus source notes
 - `lib/showdown/team.ts`: Showdown team packing
 - `lib/types.ts`: battle snapshot and choice types
 - `app/api/battle/start/route.ts`: battle start route
@@ -123,6 +133,7 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 ## Known Caveats
 
 - Search may be slow if implemented with naive full replay and high depth.
+- Arena simulation now caches request normalization and replay prefixes, but full Showdown replay is still the dominant cost for long target-training runs.
 - The evaluator will initially be imperfect; keep it small and testable.
 - Showdown protocol parsing may need more events as the UI and evaluator become richer.
 - Battle logs currently simplify some item-removal messages.

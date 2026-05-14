@@ -5,7 +5,7 @@ import {enabledChoices, tieBreak} from "@/lib/battle-ai/policy";
 import type {BattleDecision, BattlePolicy, BattlePolicyContext} from "@/lib/battle-ai/policy";
 import type {BattleChoice, BattleSnapshot} from "@/lib/types";
 
-interface MinimaxPolicyConfig {
+export interface MinimaxPolicyConfig {
   depth: number;
   nodeBudget: number;
   timeBudgetMs: number;
@@ -24,7 +24,7 @@ interface SimulatedRoot {
   score: number;
 }
 
-const DEFAULT_CONFIG: MinimaxPolicyConfig = {
+export const DEFAULT_MINIMAX_CONFIG: MinimaxPolicyConfig = {
   depth: 2,
   nodeBudget: 250,
   timeBudgetMs: 250,
@@ -49,7 +49,7 @@ export function chooseMinimaxBattleAction(
   context: BattlePolicyContext,
   configOverrides: Partial<MinimaxPolicyConfig> = {}
 ): BattleDecision {
-  const config = {...DEFAULT_CONFIG, ...configOverrides};
+  const config = {...DEFAULT_MINIMAX_CONFIG, ...configOverrides};
   const choices = enabledChoices(context.legalChoices);
   if (!choices.length) return {};
 
@@ -102,12 +102,14 @@ function simulateRootChoices(
   search: SearchState
 ): SimulatedRoot[] {
   const roots: SimulatedRoot[] = [];
+  const evaluator = context.evaluator ?? evaluateBattleState;
+  const perspective = context.perspective ?? "nemesis";
   for (const choice of orderChoices(choices, context.seed, "max").slice(0, config.maxLegalChoices)) {
     if (!canSearch(search, config)) break;
     const snapshot = context.simulateChoice?.(choice);
     search.nodesEvaluated += 1;
     if (!snapshot) continue;
-    roots.push({choice, snapshot, score: evaluateBattleState(snapshot, "nemesis")});
+    roots.push({choice, snapshot, score: evaluator(snapshot, perspective)});
   }
 
   return roots
@@ -139,6 +141,8 @@ function evaluateRootChoice(
   let worstScore = Number.POSITIVE_INFINITY;
   let completedChildren = 0;
   let childBeta = beta;
+  const evaluator = context.evaluator ?? evaluateBattleState;
+  const perspective = context.perspective ?? "nemesis";
 
   for (const userChoice of orderChoices(userChoices, `${context.seed}:${root.choice.id}`, "min").slice(0, config.maxLegalChoices)) {
     if (!canSearch(search, config)) return {score: worstScore, complete: false};
@@ -148,7 +152,7 @@ function evaluateRootChoice(
     if (!snapshot) continue;
 
     completedChildren += 1;
-    const score = evaluateBattleState(snapshot, "nemesis") - tieBreak(context.seed, `${root.choice.id}:${userChoice.id}`);
+    const score = evaluator(snapshot, perspective) - tieBreak(context.seed, `${root.choice.id}:${userChoice.id}`);
     worstScore = Math.min(worstScore, score);
     childBeta = Math.min(childBeta, worstScore);
     if (childBeta <= alpha) break;

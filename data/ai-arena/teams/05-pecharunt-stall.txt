@@ -1,0 +1,65 @@
+Clodsire @ Heavy-Duty Boots
+Ability: Unaware
+Tera Type: Steel
+EVs: 116 HP / 148 Def / 244 SpD
+Careful Nature
+IVs: 30 Spe
+- Recover
+- Amnesia
+- Toxic
+- Bulldoze
+
+Dondozo @ Heavy-Duty Boots
+Ability: Unaware
+Tera Type: Dark
+EVs: 252 HP / 252 Def / 4 SpD
+Relaxed Nature
+IVs: 0 Spe
+- Rest
+- Sleep Talk
+- Body Press
+- Crunch
+
+Gliscor @ Toxic Orb
+Ability: Poison Heal
+Tera Type: Dragon
+EVs: 244 HP / 248 Def / 16 SpD
+Impish Nature
+IVs: 30 Spe
+- Protect
+- Stealth Rock
+- Toxic
+- Knock Off
+
+Alomomola @ Heavy-Duty Boots
+Ability: Regenerator
+Level: 99
+Tera Type: Ice
+EVs: 252 HP / 4 Def / 252 SpD
+Sassy Nature
+IVs: 0 Spe
+- Protect
+- Wish
+- Mirror Coat
+- Flip Turn
+
+Corviknight @ Leftovers
+Ability: Pressure
+Tera Type: Steel
+EVs: 252 HP / 72 Atk / 184 SpD
+Careful Nature
+- Protect
+- Roost
+- Defog
+- Iron Head
+
+Pecharunt @ Heavy-Duty Boots
+Ability: Poison Puppeteer
+Tera Type: Ghost
+EVs: 248 HP / 208 Def / 52 Spe
+Bold Nature
+IVs: 0 Atk
+- Recover
+- Toxic
+- Mean Look
+- Curse

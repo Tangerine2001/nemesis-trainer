@@ -1,4 +1,5 @@
 import {hashString} from "@/lib/boss-generator/random";
+import type {BattleEvaluationPerspective, BattleEvaluator} from "@/lib/battle-ai/evaluate";
 import type {BattleChoice, BattleSnapshot} from "@/lib/types";
 
 export interface AiMoveRequest {
@@ -38,6 +39,8 @@ export interface AiRequest {
 
 export interface BattlePolicyContext {
   seed: string;
+  perspective?: BattleEvaluationPerspective;
+  evaluator?: BattleEvaluator;
   request?: AiRequest;
   snapshot: BattleSnapshot;
   legalChoices: BattleChoice[];

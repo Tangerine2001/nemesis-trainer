@@ -1,0 +1,62 @@
+Rillaboom @ Terrain Extender
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 204 HP / 252 Atk / 52 Spe
+Adamant Nature
+- Grassy Glide
+- Knock Off
+- U-turn
+- Low Kick
+
+Hawlucha @ Grassy Seed
+Ability: Unburden
+Tera Type: Flying
+EVs: 72 HP / 252 Atk / 60 SpD / 124 Spe
+Adamant Nature
+- Swords Dance
+- Close Combat
+- Acrobatics
+- Encore
+
+Comfey @ Grassy Seed
+Ability: Triage
+Tera Type: Poison
+EVs: 252 HP / 4 Def / 252 SpA
+Modest Nature
+IVs: 0 Atk
+- Calm Mind
+- Draining Kiss
+- Stored Power
+- Synthesis
+
+Heatran @ Power Herb
+Ability: Flash Fire
+Tera Type: Grass
+EVs: 252 SpA / 4 SpD / 252 Spe
+Timid Nature
+IVs: 0 Atk
+- Magma Storm
+- Stealth Rock
+- Solar Beam
+- Taunt
+
+Great Tusk @ Booster Energy
+Ability: Protosynthesis
+Tera Type: Water
+EVs: 252 Atk / 4 SpD / 252 Spe
+Jolly Nature
+- Rapid Spin
+- Headlong Rush
+- Ice Spinner
+- Close Combat
+
+Pecharunt @ Colbur Berry
+Ability: Poison Puppeteer
+Tera Type: Ghost
+EVs: 252 SpA / 4 SpD / 252 Spe
+Timid Nature
+IVs: 0 Atk
+- Nasty Plot
+- Malignant Chain
+- Shadow Ball
+- Recover

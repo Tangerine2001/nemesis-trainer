@@ -1,0 +1,61 @@
+Samurott-Hisui @ Assault Vest
+Ability: Sharpness
+Tera Type: Poison
+EVs: 248 HP / 84 Atk / 124 SpD / 52 Spe
+Adamant Nature
+- Ceaseless Edge
+- Razor Shell
+- Sucker Punch
+- Knock Off
+
+Zapdos @ Heavy-Duty Boots
+Ability: Static
+Tera Type: Steel
+EVs: 248 HP / 252 Def / 8 Spe
+Bold Nature
+IVs: 0 Atk
+- Volt Switch
+- Hurricane
+- Roost
+- Thunder Wave
+
+Iron Treads @ Leftovers
+Ability: Quark Drive
+Tera Type: Ghost
+EVs: 252 Atk / 4 SpD / 252 Spe
+Jolly Nature
+- Stealth Rock
+- Rapid Spin
+- Earthquake
+- Knock Off
+
+Ceruledge @ Heavy-Duty Boots
+Ability: Weak Armor
+Tera Type: Fairy
+EVs: 232 HP / 252 Atk / 4 Def / 20 Spe
+Adamant Nature
+- Poltergeist
+- Bitter Blade
+- Shadow Sneak
+- Swords Dance
+
+Gholdengo @ Air Balloon
+Ability: Good as Gold
+Tera Type: Fairy
+EVs: 252 HP / 196 Def / 60 Spe
+Bold Nature
+IVs: 0 Atk
+- Hex
+- Thunder Wave
+- Recover
+- Focus Blast
+
+Kingambit @ Leftovers
+Ability: Supreme Overlord
+Tera Type: Fighting
+EVs: 252 Atk / 4 Def / 252 Spe
+Jolly Nature
+- Swords Dance
+- Sucker Punch
+- Low Kick
+- Iron Head

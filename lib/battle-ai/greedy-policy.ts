@@ -29,7 +29,8 @@ export function chooseGreedyBattleAction(context: BattlePolicyContext): BattleDe
     if (!simulated) continue;
     nodesEvaluated += 1;
 
-    const score = evaluateBattleState(simulated, "nemesis") + tieBreak(context.seed, choice.id);
+    const evaluator = context.evaluator ?? evaluateBattleState;
+    const score = evaluator(simulated, context.perspective ?? "nemesis") + tieBreak(context.seed, choice.id);
     if (score > bestScore) {
       best = choice;
       bestScore = score;

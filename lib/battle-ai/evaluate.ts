@@ -3,20 +3,54 @@ import type {BattlePokemonView, BattleSideView, BattleSnapshot} from "@/lib/type
 export type BattleEvaluationPerspective = "user" | "nemesis";
 
 const TERMINAL_SCORE = 1_000_000;
-const ALIVE_WEIGHT = 180;
-const TOTAL_HP_WEIGHT = 120;
-const ACTIVE_HP_WEIGHT = 45;
 
-const STATUS_WEIGHTS: Record<string, number> = {
-  brn: 25,
-  par: 25,
-  psn: 15,
-  tox: 30,
-  slp: 45,
-  frz: 45
+export interface EvaluationWeights {
+  alive: number;
+  totalHp: number;
+  activeHp: number;
+  status: Record<string, number>;
+}
+
+export const DEFAULT_EVALUATION_WEIGHTS: EvaluationWeights = {
+  alive: 180,
+  totalHp: 120,
+  activeHp: 45,
+  status: {
+    brn: 25,
+    par: 25,
+    psn: 15,
+    tox: 30,
+    slp: 45,
+    frz: 45
+  }
 };
 
-export function evaluateBattleState(snapshot: BattleSnapshot, perspective: BattleEvaluationPerspective): number {
+export const EVALUATION_WEIGHT_BOUNDS: Record<keyof Omit<EvaluationWeights, "status">, {min: number; max: number}> = {
+  alive: {min: 50, max: 450},
+  totalHp: {min: 20, max: 300},
+  activeHp: {min: 0, max: 180}
+};
+
+export const STATUS_WEIGHT_BOUNDS: Record<string, {min: number; max: number}> = {
+  brn: {min: 0, max: 90},
+  par: {min: 0, max: 90},
+  psn: {min: 0, max: 75},
+  tox: {min: 0, max: 100},
+  slp: {min: 0, max: 120},
+  frz: {min: 0, max: 120}
+};
+
+export type BattleEvaluator = (snapshot: BattleSnapshot, perspective: BattleEvaluationPerspective) => number;
+
+export function createEvaluator(weights: EvaluationWeights = DEFAULT_EVALUATION_WEIGHTS): BattleEvaluator {
+  return (snapshot, perspective) => evaluateBattleState(snapshot, perspective, weights);
+}
+
+export function evaluateBattleState(
+  snapshot: BattleSnapshot,
+  perspective: BattleEvaluationPerspective,
+  weights: EvaluationWeights = DEFAULT_EVALUATION_WEIGHTS
+): number {
   if (snapshot.ended) {
     if (!snapshot.winner) return 0;
     return snapshot.winner === perspective ? TERMINAL_SCORE : -TERMINAL_SCORE;
@@ -26,27 +60,27 @@ export function evaluateBattleState(snapshot: BattleSnapshot, perspective: Battl
   const opposing = perspective === "user" ? snapshot.opponent : snapshot.user;
 
   return (
-    aliveScore(own, opposing) +
-    totalHpScore(own, opposing) +
-    activeHpScore(own, opposing) +
-    statusScore(own, opposing)
+    aliveScore(own, opposing, weights) +
+    totalHpScore(own, opposing, weights) +
+    activeHpScore(own, opposing, weights) +
+    statusScore(own, opposing, weights)
   );
 }
 
-function aliveScore(own: BattleSideView, opposing: BattleSideView): number {
-  return (aliveCount(own) - aliveCount(opposing)) * ALIVE_WEIGHT;
+function aliveScore(own: BattleSideView, opposing: BattleSideView, weights: EvaluationWeights): number {
+  return (aliveCount(own) - aliveCount(opposing)) * weights.alive;
 }
 
-function totalHpScore(own: BattleSideView, opposing: BattleSideView): number {
-  return (hpTotal(own) - hpTotal(opposing)) * TOTAL_HP_WEIGHT;
+function totalHpScore(own: BattleSideView, opposing: BattleSideView, weights: EvaluationWeights): number {
+  return (hpTotal(own) - hpTotal(opposing)) * weights.totalHp;
 }
 
-function activeHpScore(own: BattleSideView, opposing: BattleSideView): number {
-  return (activeHp(own) - activeHp(opposing)) * ACTIVE_HP_WEIGHT;
+function activeHpScore(own: BattleSideView, opposing: BattleSideView, weights: EvaluationWeights): number {
+  return (activeHp(own) - activeHp(opposing)) * weights.activeHp;
 }
 
-function statusScore(own: BattleSideView, opposing: BattleSideView): number {
-  return sideStatusPenalty(opposing) - sideStatusPenalty(own);
+function statusScore(own: BattleSideView, opposing: BattleSideView, weights: EvaluationWeights): number {
+  return sideStatusPenalty(opposing, weights) - sideStatusPenalty(own, weights);
 }
 
 function aliveCount(side: BattleSideView): number {
@@ -62,8 +96,8 @@ function activeHp(side: BattleSideView): number {
   return active ? hpFraction(active) : 0;
 }
 
-function sideStatusPenalty(side: BattleSideView): number {
-  return side.pokemon.reduce((total, pokemon) => total + statusPenalty(pokemon), 0);
+function sideStatusPenalty(side: BattleSideView, weights: EvaluationWeights): number {
+  return side.pokemon.reduce((total, pokemon) => total + statusPenalty(pokemon, weights), 0);
 }
 
 export function hpFraction(pokemon: BattlePokemonView): number {
@@ -78,9 +112,9 @@ export function hpFraction(pokemon: BattlePokemonView): number {
   return Math.max(0, Math.min(1, current / max));
 }
 
-function statusPenalty(pokemon: BattlePokemonView): number {
-  const status = pokemon.condition.split(/\s+/).find((part) => part in STATUS_WEIGHTS);
-  return status ? STATUS_WEIGHTS[status] : 0;
+function statusPenalty(pokemon: BattlePokemonView, weights: EvaluationWeights): number {
+  const status = pokemon.condition.split(/\s+/).find((part) => part in weights.status);
+  return status ? weights.status[status] : 0;
 }
 
 function isFaintedCondition(condition: string): boolean {

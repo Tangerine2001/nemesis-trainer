@@ -1,0 +1,61 @@
+Hoopa-Unbound @ Choice Scarf
+Ability: Magician
+Tera Type: Fighting
+EVs: 252 Atk / 4 SpA / 252 Spe
+Hasty Nature
+- Psychic Noise
+- Knock Off
+- Drain Punch
+- Trick
+
+Zamazenta @ Leftovers
+Ability: Dauntless Shield
+Tera Type: Fire
+EVs: 4 HP / 252 Def / 252 Spe
+Jolly Nature
+- Iron Defense
+- Body Press
+- Crunch
+- Heavy Slam
+
+Iron Moth @ Booster Energy
+Ability: Quark Drive
+Tera Type: Fairy
+EVs: 124 Def / 132 SpA / 252 Spe
+Timid Nature
+IVs: 0 Atk
+- Fiery Dance
+- Sludge Wave
+- Dazzling Gleam
+- Toxic
+
+Kyurem @ Assault Vest
+Ability: Pressure
+Tera Type: Fairy
+EVs: 252 SpA / 4 SpD / 252 Spe
+Timid Nature
+IVs: 0 Atk
+- Ice Beam
+- Freeze-Dry
+- Body Press
+- Earth Power
+
+Dragonite @ Heavy-Duty Boots
+Ability: Multiscale
+Tera Type: Flying
+EVs: 252 Atk / 4 Def / 252 Spe
+Adamant Nature
+- Dragon Dance
+- Tera Blast
+- Earthquake
+- Extreme Speed
+
+Great Tusk @ Booster Energy
+Ability: Protosynthesis
+Tera Type: Steel
+EVs: 252 Atk / 4 Def / 252 Spe
+Jolly Nature
+- Headlong Rush
+- Head Smash
+- Rapid Spin
+- Stealth Rock

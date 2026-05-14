@@ -1,0 +1,60 @@
+Hoopa-Unbound @ Life Orb
+Ability: Magician
+Tera Type: Fairy
+EVs: 252 Atk / 180 Def / 76 SpA
+Brave Nature
+IVs: 0 Spe
+- Drain Punch
+- Hyperspace Fury
+- Psychic Noise
+- Trick Room
+
+Kingambit @ Lum Berry
+Ability: Supreme Overlord
+Tera Type: Ghost
+EVs: 156 HP / 252 Atk / 100 Spe
+Adamant Nature
+- Swords Dance
+- Sucker Punch
+- Kowtow Cleave
+- Iron Head
+
+Samurott-Hisui @ Assault Vest
+Ability: Sharpness
+Tera Type: Poison
+EVs: 240 HP / 112 Atk / 92 SpD / 64 Spe
+Adamant Nature
+- Ceaseless Edge
+- Knock Off
+- Sacred Sword
+- Aqua Cutter
+
+Landorus-Therian @ Rocky Helmet
+Ability: Intimidate
+Tera Type: Ghost
+EVs: 248 HP / 8 SpA / 252 Spe
+Timid Nature
+- Earth Power
+- Stealth Rock
+- Taunt
+- U-turn
+
+Iron Valiant @ Booster Energy
+Ability: Quark Drive
+Tera Type: Steel
+EVs: 252 Atk / 4 SpD / 252 Spe
+Jolly Nature
+- Swords Dance
+- Close Combat
+- Knock Off
+- Ice Punch
+
+Pecharunt @ Shuca Berry
+Ability: Poison Puppeteer
+Tera Type: Fighting
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Shadow Ball
+- Malignant Chain
+- Tera Blast
+- Nasty Plot

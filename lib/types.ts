@@ -120,6 +120,13 @@ export interface AuditRequest {
   style?: TrainerStyle;
 }
 
+export interface BattleAiWeights {
+  alive: number;
+  totalHp: number;
+  activeHp: number;
+  status: Record<string, number>;
+}
+
 export interface AuditResult {
   format: SupportedFormat;
   seed: string;
@@ -181,7 +188,9 @@ export interface BattleSnapshot {
   errors: string[];
 }
 
-export interface BattleStartRequest extends AuditRequest {}
+export interface BattleStartRequest extends AuditRequest {
+  aiWeights?: BattleAiWeights;
+}
 
 export interface BattleTurnRequest extends BattleStartRequest {
   userChoices: string[];

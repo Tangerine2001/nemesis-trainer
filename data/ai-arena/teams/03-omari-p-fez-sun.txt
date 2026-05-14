@@ -1,0 +1,62 @@
+Cinderace @ Flame Plate
+Ability: Libero
+Tera Type: Fire
+EVs: 252 Atk / 4 SpA / 252 Spe
+Naughty Nature
+- Pyro Ball
+- High Jump Kick
+- Sucker Punch
+- Court Change
+
+Volcanion @ Choice Specs
+Ability: Water Absorb
+Tera Type: Ground
+EVs: 128 HP / 252 SpA / 128 Spe
+Modest Nature
+IVs: 0 Atk
+- Steam Eruption
+- Fire Blast
+- Solar Beam
+- Earth Power
+
+Torkoal @ Heat Rock
+Ability: Drought
+Tera Type: Fairy
+EVs: 200 HP / 68 Def / 232 SpA / 8 SpD
+Bold Nature
+- Stealth Rock
+- Fire Blast
+- Rapid Spin
+- Earth Power
+
+Mandibuzz @ Rocky Helmet
+Ability: Overcoat
+Tera Type: Fairy
+EVs: 212 HP / 240 Def / 8 SpD / 48 Spe
+Bold Nature
+IVs: 0 Atk
+- Toxic
+- Foul Play
+- Roost
+- Defog
+
+Great Tusk @ Choice Scarf
+Ability: Protosynthesis
+Tera Type: Ground
+EVs: 252 Atk / 4 SpD / 252 Spe
+Adamant Nature
+- Close Combat
+- Knock Off
+- Ice Spinner
+- Headlong Rush
+
+Fezandipiti @ Leftovers
+Ability: Toxic Chain
+Tera Type: Ground
+EVs: 252 HP / 252 SpA / 4 Spe
+Modest Nature
+IVs: 0 Atk
+- Nasty Plot
+- Moonblast
+- Sludge Bomb
+- Tera Blast
