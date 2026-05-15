@@ -173,6 +173,18 @@ export const SPEED_CONTROL_MOVES = new Set([
 export const HAZARD_MOVES = new Set(["ceaseless edge", "spikes", "stealth rock", "sticky web", "toxic spikes"]);
 export const HAZARD_REMOVAL_MOVES = new Set(["defog", "mortal spin", "rapid spin", "tidy up"]);
 export const SETUP_ANSWER_MOVES = new Set(["clear smog", "dragon tail", "encore", "haze", "roar", "taunt", "whirlwind"]);
+export const SETUP_MOVES = new Set([
+  "agility",
+  "bulk up",
+  "calm mind",
+  "dragon dance",
+  "iron defense",
+  "nasty plot",
+  "quiver dance",
+  "shell smash",
+  "swords dance"
+]);
+export const RECOVERY_MOVES = new Set(["moonlight", "recover", "roost", "shore up", "slack off", "soft-boiled", "synthesis"]);
 export const DISRUPTION_MOVES = new Set([
   "encore",
   "knock off",
@@ -184,6 +196,8 @@ export const DISRUPTION_MOVES = new Set([
   "will-o-wisp",
   "yawn"
 ]);
+
+const NORMALIZED_MOVE_TYPES = Object.fromEntries(Object.entries(MOVE_TYPES).map(([move, type]) => [toId(move), type])) as Record<string, PokemonType>;
 
 export const TYPE_CHART: Record<PokemonType, Partial<Record<PokemonType, number>>> = {
   Normal: {Rock: 0.5, Ghost: 0, Steel: 0.5},
@@ -207,7 +221,8 @@ export const TYPE_CHART: Record<PokemonType, Partial<Record<PokemonType, number>
 };
 
 export function moveType(move: string): PokemonType | undefined {
-  return MOVE_TYPES[move.toLowerCase()];
+  const lower = move.toLowerCase();
+  return MOVE_TYPES[lower] ?? NORMALIZED_MOVE_TYPES[toId(lower)];
 }
 
 export function typeEffectiveness(attackType: PokemonType, defenderTypes: PokemonType[]): number {

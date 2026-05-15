@@ -244,8 +244,8 @@ function snapshotForSide(state: ArenaBattleState, side: ArenaSide, choicesSide: 
     ended: state.ended,
     winner: state.winner === "p1" ? "user" : state.winner === "p2" ? "nemesis" : undefined,
     log: state.log.slice(-80),
-    user: side === "p1" ? sideView(state.p1Request, "Agent A") : sideView(state.p2Request, "Agent B"),
-    opponent: side === "p1" ? sideView(state.p2Request, "Agent B") : sideView(state.p1Request, "Agent A"),
+    user: sideView(state.p1Request, "Agent A"),
+    opponent: sideView(state.p2Request, "Agent B"),
     choices: state.ended ? [] : choicesForRequest(choicesSide === "p1" ? state.p1Request : state.p2Request, runtime),
     errors: state.errors
   };

@@ -83,6 +83,10 @@ function cloneWeights(weights: EvaluationWeights): EvaluationWeights {
     alive: weights.alive,
     totalHp: weights.totalHp,
     activeHp: weights.activeHp,
+    typePressure: weights.typePressure,
+    speedPressure: weights.speedPressure,
+    moveUtility: weights.moveUtility,
+    itemAbility: weights.itemAbility,
     status: {...weights.status}
   };
 }

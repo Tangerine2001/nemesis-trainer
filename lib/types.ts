@@ -124,6 +124,10 @@ export interface BattleAiWeights {
   alive: number;
   totalHp: number;
   activeHp: number;
+  typePressure: number;
+  speedPressure: number;
+  moveUtility: number;
+  itemAbility: number;
   status: Record<string, number>;
 }
 

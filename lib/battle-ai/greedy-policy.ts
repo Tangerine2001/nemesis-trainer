@@ -1,4 +1,5 @@
 import {basicPolicy} from "@/lib/battle-ai/basic-policy";
+import {rankBattleChoices} from "@/lib/battle-ai/choice-pruning";
 import {evaluateBattleState} from "@/lib/battle-ai/evaluate";
 import {enabledChoices, tieBreak} from "@/lib/battle-ai/policy";
 import type {BattleDecision, BattlePolicy, BattlePolicyContext} from "@/lib/battle-ai/policy";
@@ -23,14 +24,23 @@ export function chooseGreedyBattleAction(context: BattlePolicyContext): BattleDe
   let best = choices[0];
   let bestScore = Number.NEGATIVE_INFINITY;
   let nodesEvaluated = 0;
+  const perspective = context.perspective ?? "nemesis";
+  const rankedChoices = rankBattleChoices({
+    choices,
+    request: context.request,
+    snapshot: context.snapshot,
+    perspective,
+    seed: context.seed,
+    mode: "max"
+  });
 
-  for (const choice of choices) {
+  for (const choice of rankedChoices) {
     const simulated = context.simulateChoice(choice);
     if (!simulated) continue;
     nodesEvaluated += 1;
 
     const evaluator = context.evaluator ?? evaluateBattleState;
-    const score = evaluator(simulated, context.perspective ?? "nemesis") + tieBreak(context.seed, choice.id);
+    const score = evaluator(simulated, perspective) + tieBreak(context.seed, choice.id);
     if (score > bestScore) {
       best = choice;
       bestScore = score;

@@ -1,4 +1,5 @@
 import {basicPolicy} from "@/lib/battle-ai/basic-policy";
+import {pruneBattleChoices} from "@/lib/battle-ai/choice-pruning";
 import {evaluateBattleState} from "@/lib/battle-ai/evaluate";
 import {greedyPolicy} from "@/lib/battle-ai/greedy-policy";
 import {enabledChoices, tieBreak} from "@/lib/battle-ai/policy";
@@ -104,7 +105,17 @@ function simulateRootChoices(
   const roots: SimulatedRoot[] = [];
   const evaluator = context.evaluator ?? evaluateBattleState;
   const perspective = context.perspective ?? "nemesis";
-  for (const choice of orderChoices(choices, context.seed, "max").slice(0, config.maxLegalChoices)) {
+  const pruned = pruneBattleChoices({
+    choices,
+    request: context.request,
+    snapshot: context.snapshot,
+    perspective,
+    seed: context.seed,
+    mode: "max",
+    limit: config.maxLegalChoices
+  });
+
+  for (const choice of pruned) {
     if (!canSearch(search, config)) break;
     const snapshot = context.simulateChoice?.(choice);
     search.nodesEvaluated += 1;
@@ -144,7 +155,16 @@ function evaluateRootChoice(
   const evaluator = context.evaluator ?? evaluateBattleState;
   const perspective = context.perspective ?? "nemesis";
 
-  for (const userChoice of orderChoices(userChoices, `${context.seed}:${root.choice.id}`, "min").slice(0, config.maxLegalChoices)) {
+  const orderedUserChoices = pruneBattleChoices({
+    choices: userChoices,
+    snapshot: root.snapshot,
+    perspective,
+    seed: `${context.seed}:${root.choice.id}`,
+    mode: "min",
+    limit: config.maxLegalChoices
+  });
+
+  for (const userChoice of orderedUserChoices) {
     if (!canSearch(search, config)) return {score: worstScore, complete: false};
 
     const snapshot = context.simulateUserChoice(root.choice, userChoice);
@@ -159,21 +179,6 @@ function evaluateRootChoice(
   }
 
   return completedChildren > 0 ? {score: worstScore, complete: true} : {score: root.score, complete: true};
-}
-
-function orderChoices(choices: BattleChoice[], seed: string, mode: "max" | "min"): BattleChoice[] {
-  return choices
-    .slice()
-    .sort((left, right) => {
-      const kindScore = choiceKindScore(right) - choiceKindScore(left);
-      if (kindScore !== 0) return mode === "max" ? kindScore : -kindScore;
-      const seeded = tieBreak(seed, right.id) - tieBreak(seed, left.id);
-      return mode === "max" ? seeded : -seeded;
-    });
-}
-
-function choiceKindScore(choice: BattleChoice): number {
-  return choice.kind === "move" ? 1 : 0;
 }
 
 function terminalRank(snapshot: BattleSnapshot): number {

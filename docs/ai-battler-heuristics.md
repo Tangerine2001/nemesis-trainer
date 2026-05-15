@@ -19,9 +19,9 @@ loss: -1_000_000
 tie:  0
 ```
 
-## Initial Formula
+## Current Formula
 
-Start with:
+The current implementation scores:
 
 ```text
 score =
@@ -31,13 +31,13 @@ score =
   + activeMatchupScore
   + speedPressureScore
   + statusScore
-  + boostScore
-  + hazardScore
+  + moveUtilityScore
   + itemScore
-  + choicePressureScore
 ```
 
 Keep each function small and separately tested.
+
+Boost stages, true side-condition hazards, and choice-lock state are not yet parsed into `BattleSnapshot`, so they remain planned evaluator signals rather than active scoring inputs.
 
 ## Suggested Weights
 
@@ -220,6 +220,15 @@ Order by:
 9. weak resisted moves
 
 The ordering function should be deterministic and stable.
+
+The current pre-ranker uses only legal choices plus data already present in the request/snapshot:
+
+- type effectiveness of known move labels/ids into the active target
+- STAB, priority, speed control, hazards, hazard removal, setup, recovery, setup answers, and disruption move tags
+- active HP and base-speed pressure
+- switch target HP and estimated defensive pressure
+
+It orders and caps minimax roots/children but does not create new actions or bypass Showdown legality.
 
 ## Greedy Policy
 

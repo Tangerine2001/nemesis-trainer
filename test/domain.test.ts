@@ -1,5 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {chooseBasicBattleAction} from "@/lib/battle-ai/basic-policy";
+import {rankBattleChoices} from "@/lib/battle-ai/choice-pruning";
 import {evaluateBattleState} from "@/lib/battle-ai/evaluate";
 import {chooseGreedyBattleAction} from "@/lib/battle-ai/greedy-policy";
 import {chooseMinimaxBattleAction} from "@/lib/battle-ai/minimax-policy";
@@ -214,8 +215,8 @@ describe("battle AI policies", () => {
         {species: "Kingambit", condition: "100/100"}
       ],
       opponent: [
-        {species: "Gholdengo", condition: "100/100", active: true},
-        {species: "Dragonite", condition: "100/100"}
+        {species: "Dragapult", condition: "100/100", active: true},
+        {species: "Kingambit", condition: "100/100"}
       ]
     });
     const advantage = battleFixture({
@@ -234,6 +235,20 @@ describe("battle AI policies", () => {
     expect(evaluateBattleState(advantage, "user")).toBeGreaterThan(250);
     expect(evaluateBattleState(terminal, "user")).toBe(1_000_000);
     expect(evaluateBattleState(terminal, "nemesis")).toBe(-1_000_000);
+  });
+
+  it("scores speed and type pressure from known active battle state", () => {
+    const speedPressure = battleFixture({
+      user: [{species: "Dragapult", condition: "100/100", active: true}],
+      opponent: [{species: "Kingambit", condition: "100/100", active: true}]
+    });
+    const typePressure = battleFixture({
+      user: [{species: "Great Tusk", condition: "100/100", active: true, moves: ["Headlong Rush"]}],
+      opponent: [{species: "Gholdengo", condition: "100/100", active: true, moves: ["Shadow Ball"]}]
+    });
+
+    expect(evaluateBattleState(speedPressure, "user")).toBeGreaterThan(evaluateBattleState(speedPressure, "nemesis"));
+    expect(evaluateBattleState(typePressure, "user")).toBeGreaterThan(50);
   });
 
   it("keeps the basic policy deterministic for equivalent choices", () => {
@@ -305,6 +320,38 @@ describe("battle AI policies", () => {
 
     expect(decision.choice?.id).toBe("move 2");
     expect(decision.reason).toBe("minimax depth 2");
+  });
+
+  it("pre-ranks super effective and priority moves before low-value choices", () => {
+    const choices: BattleChoice[] = [
+      {id: "move 1", label: "Rapid Spin", kind: "move"},
+      {id: "move 2", label: "Headlong Rush", kind: "move"},
+      {id: "move 3", label: "Swords Dance", kind: "move"}
+    ];
+    const ranked = rankBattleChoices({
+      choices,
+      request: {
+        side: {id: "p1", name: "You", pokemon: []},
+        active: [
+          {
+            moves: [
+              {move: "Rapid Spin", id: "rapidspin", pp: 64, maxpp: 64, target: "normal"},
+              {move: "Headlong Rush", id: "headlongrush", pp: 8, maxpp: 8, target: "normal"},
+              {move: "Swords Dance", id: "swordsdance", pp: 32, maxpp: 32, target: "self"}
+            ]
+          }
+        ]
+      },
+      snapshot: battleFixture({
+        user: [{species: "Great Tusk", condition: "100/100", active: true, moves: ["Headlong Rush", "Rapid Spin"]}],
+        opponent: [{species: "Gholdengo", condition: "100/100", active: true}]
+      }),
+      perspective: "user",
+      seed: "rank-moves",
+      mode: "max"
+    });
+
+    expect(ranked[0].label).toBe("Headlong Rush");
   });
 
   it("uses minimax to avoid immediate user punishments", () => {
@@ -379,8 +426,8 @@ function battleFixture({
   user,
   opponent
 }: {
-  user: Array<{species: string; condition: string; active?: boolean; fainted?: boolean}>;
-  opponent: Array<{species: string; condition: string; active?: boolean; fainted?: boolean}>;
+  user: Array<{species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string}>;
+  opponent: Array<{species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string}>;
 }): BattleSnapshot {
   return {
     turn: 1,
@@ -394,7 +441,7 @@ function battleFixture({
 }
 
 function pokemonFixture(
-  pokemon: {species: string; condition: string; active?: boolean; fainted?: boolean},
+  pokemon: {species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string},
   index: number
 ): BattleSnapshot["user"]["pokemon"][number] {
   return {
@@ -403,6 +450,8 @@ function pokemonFixture(
     condition: pokemon.condition,
     active: Boolean(pokemon.active),
     fainted: pokemon.fainted ?? pokemon.condition.includes("fnt"),
-    moves: []
+    item: pokemon.item,
+    ability: pokemon.ability,
+    moves: pokemon.moves ?? []
   };
 }
