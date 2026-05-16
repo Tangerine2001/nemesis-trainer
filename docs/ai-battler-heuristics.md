@@ -33,11 +33,17 @@ score =
   + statusScore
   + moveUtilityScore
   + itemScore
+  + koThreatScore
+  + boostScore
+  + sideConditionScore
+  + endgameScore
 ```
 
 Keep each function small and separately tested.
 
-Boost stages, true side-condition hazards, and choice-lock state are not yet parsed into `BattleSnapshot`, so they remain planned evaluator signals rather than active scoring inputs.
+Boost stages and side conditions are parsed from Showdown's public protocol where available and attached to `BattleSnapshot`. Field effects such as weather and terrain are tracked but currently have neutral or very low scoring because they are symmetrical unless a later evaluator understands team-specific abuse.
+
+Choice-lock state is not yet represented explicitly, so it remains a planned evaluator signal.
 
 ## Suggested Weights
 
@@ -55,6 +61,7 @@ item advantage:               +10 to +35
 speed advantage:              +10 to +35
 likely KO available:          +90
 likely opponent KO available: -90
+endgame cleanup pressure:     +20 to +80
 ```
 
 Terminal scores must remain much larger than all heuristic scores.

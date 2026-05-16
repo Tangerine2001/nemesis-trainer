@@ -128,6 +128,10 @@ export interface BattleAiWeights {
   speedPressure: number;
   moveUtility: number;
   itemAbility: number;
+  koThreat: number;
+  boost: number;
+  sideCondition: number;
+  endgame: number;
   status: Record<string, number>;
 }
 
@@ -168,11 +172,19 @@ export interface BattlePokemonView {
   ability?: string;
   teraType?: string;
   moves: string[];
+  boosts?: Partial<Record<"atk" | "def" | "spa" | "spd" | "spe" | "accuracy" | "evasion", number>>;
+}
+
+export interface BattleSideCondition {
+  id: string;
+  label: string;
+  layers?: number;
 }
 
 export interface BattleSideView {
   name: string;
   pokemon: BattlePokemonView[];
+  conditions?: BattleSideCondition[];
 }
 
 export interface BattleLogEntry {

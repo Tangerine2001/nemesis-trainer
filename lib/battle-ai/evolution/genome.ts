@@ -87,6 +87,10 @@ function cloneWeights(weights: EvaluationWeights): EvaluationWeights {
     speedPressure: weights.speedPressure,
     moveUtility: weights.moveUtility,
     itemAbility: weights.itemAbility,
+    koThreat: weights.koThreat,
+    boost: weights.boost,
+    sideCondition: weights.sideCondition,
+    endgame: weights.endgame,
     status: {...weights.status}
   };
 }

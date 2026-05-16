@@ -1,6 +1,7 @@
 import {BattleStream} from "pokemon-showdown/dist/sim/battle-stream";
 import {basicPolicy} from "@/lib/battle-ai/basic-policy";
 import {hashString} from "@/lib/boss-generator/random";
+import {applyProtocolLineToState, createBattleProtocolState, sideViewWithProtocolState} from "@/lib/showdown/protocol-state";
 import type {AiPokemonRequest, AiRequest} from "@/lib/battle-ai/policy";
 import type {
   ArenaAgentVariant,
@@ -16,6 +17,7 @@ import type {BattleChoice, BattleLogEntry, BattlePokemonView, BattleSideView, Ba
 interface ArenaBattleState {
   p1Request?: AiRequest;
   p2Request?: AiRequest;
+  protocol: ReturnType<typeof createBattleProtocolState>;
   turn: number;
   winner?: ArenaSide | "tie";
   ended: boolean;
@@ -114,7 +116,14 @@ export function runArenaGame(input: RunArenaGameInput): ArenaGameResult {
 
 function initializeBattle(input: RunArenaGameInput): ArenaBattleState & {stream: BattleStream} {
   const stream = new BattleStream({noCatch: true});
-  const state: ArenaBattleState & {stream: BattleStream} = {stream, turn: 0, ended: false, errors: [], log: []};
+  const state: ArenaBattleState & {stream: BattleStream} = {
+    stream,
+    protocol: createBattleProtocolState(),
+    turn: 0,
+    ended: false,
+    errors: [],
+    log: []
+  };
 
   writeAndProcess(stream, `>start ${JSON.stringify({formatid: "gen9ou", seed: seedArray(input.seed)})}`, state);
   writeAndProcess(stream, `>player p1 ${JSON.stringify({name: "Agent A", team: input.p1.team.packed})}`, state);
@@ -244,8 +253,8 @@ function snapshotForSide(state: ArenaBattleState, side: ArenaSide, choicesSide: 
     ended: state.ended,
     winner: state.winner === "p1" ? "user" : state.winner === "p2" ? "nemesis" : undefined,
     log: state.log.slice(-80),
-    user: sideView(state.p1Request, "Agent A"),
-    opponent: sideView(state.p2Request, "Agent B"),
+    user: sideViewWithProtocolState(sideView(state.p1Request, "Agent A"), "p1", state.protocol),
+    opponent: sideViewWithProtocolState(sideView(state.p2Request, "Agent B"), "p2", state.protocol),
     choices: state.ended ? [] : choicesForRequest(choicesSide === "p1" ? state.p1Request : state.p2Request, runtime),
     errors: state.errors
   };
@@ -366,6 +375,7 @@ function processOutput(output: string, state: ArenaBattleState): void {
     if (!line || line === "|") continue;
     const parts = line.split("|");
     const command = parts[1];
+    applyProtocolLineToState(parts, state.protocol);
     if (command === "turn") state.turn = Number.parseInt(parts[2] ?? "0", 10) || state.turn;
     if (command === "win") {
       state.ended = true;

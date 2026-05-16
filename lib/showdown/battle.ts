@@ -7,6 +7,7 @@ import type {BattleEvaluator} from "@/lib/battle-ai/evaluate";
 import type {BattlePolicy} from "@/lib/battle-ai/policy";
 import {createAudit} from "@/lib/nemesis";
 import {hashString} from "@/lib/boss-generator/random";
+import {applyProtocolLineToState, createBattleProtocolState, sideViewWithProtocolState} from "@/lib/showdown/protocol-state";
 import {packBossTeam, packUserTeam} from "@/lib/showdown/team";
 import type {
   AuditRequest,
@@ -23,6 +24,7 @@ import type {
 interface BattleRunState {
   p1Request?: AiRequest;
   p2Request?: AiRequest;
+  protocol: ReturnType<typeof createBattleProtocolState>;
   log: BattleLogEntry[];
   turn: number;
   winner?: "user" | "nemesis";
@@ -71,7 +73,7 @@ function runBattle(request: AuditRequest, userChoices: string[], options: Battle
   }
 
   const stream = new BattleStream({noCatch: true});
-  const state: BattleRunState = {log: [], turn: 0, ended: false, errors: []};
+  const state: BattleRunState = {protocol: createBattleProtocolState(), log: [], turn: 0, ended: false, errors: []};
   const acceptedChoices: string[] = [];
   const acceptedAiChoices: string[] = [];
   const providedAiChoices = options.aiChoices ?? [];
@@ -270,6 +272,7 @@ function processUpdateLines(lines: string[], state: BattleRunState): void {
     if (!line || line === "|") continue;
     const parts = line.split("|");
     const command = parts[1];
+    applyProtocolLineToState(parts, state.protocol);
 
     if (command === "turn") {
       state.turn = Number.parseInt(parts[2] ?? "0", 10) || state.turn;
@@ -353,8 +356,8 @@ function snapshotFromState(state: BattleRunState): BattleSnapshot {
     ended: state.ended,
     winner: state.winner,
     log: state.log.slice(-80),
-    user: sideView(state.p1Request, "You"),
-    opponent: sideView(state.p2Request, "Nemesis"),
+    user: sideViewWithProtocolState(sideView(state.p1Request, "You"), "p1", state.protocol),
+    opponent: sideViewWithProtocolState(sideView(state.p2Request, "Nemesis"), "p2", state.protocol),
     choices: state.ended ? [] : buildChoices(state.p1Request),
     errors: state.errors
   };

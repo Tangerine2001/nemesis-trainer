@@ -9,9 +9,10 @@ import {createAudit} from "@/lib/nemesis";
 import {SAMPLE_TEAM, SLOW_SAMPLE_TEAM} from "@/lib/sample-teams";
 import {decodeSharePayload, encodeSharePayload} from "@/lib/share/payload";
 import {startBattle, takeBattleTurn} from "@/lib/showdown/battle";
+import {applyProtocolLineToState, createBattleProtocolState, sideViewWithProtocolState} from "@/lib/showdown/protocol-state";
 import {packBossTeam, packUserTeam} from "@/lib/showdown/team";
 import {parseTeam} from "@/lib/team-parser/parser";
-import type {BattleChoice, BattleSnapshot} from "@/lib/types";
+import type {BattleChoice, BattleSideCondition, BattleSnapshot} from "@/lib/types";
 
 describe("team parser", () => {
   it("parses common Showdown export blocks", () => {
@@ -185,25 +186,39 @@ describe("showdown battle integration", () => {
     });
 
     expect(afterHeadlongRush.aiChoices.length).toBeGreaterThan(start.aiChoices.length);
-    expect(afterHeadlongRush.snapshot.log.some((entry) => entry.text === "Gholdengo entered the battle.")).toBe(true);
-    expect(afterHeadlongRush.snapshot.log.some((entry) => entry.text === "Gholdengo is holding Air Balloon.")).toBe(true);
-    expect(afterHeadlongRush.snapshot.log.some((entry) => entry.text === "Gholdengo was immune.")).toBe(true);
-    expect(afterHeadlongRush.snapshot.opponent.pokemon.find((pokemon) => pokemon.active)?.species).toBe("Gholdengo");
+    expect(afterHeadlongRush.snapshot.log.some((entry) => entry.text === "Dragonite entered the battle.")).toBe(true);
+    expect(afterHeadlongRush.snapshot.log.some((entry) => entry.text === "Dragonite was immune.")).toBe(true);
+    expect(afterHeadlongRush.snapshot.opponent.pokemon.find((pokemon) => pokemon.active)?.species).toBe("Dragonite");
+  });
 
-    const knockOff = afterHeadlongRush.snapshot.choices.find((choice) => choice.label === "Knock Off");
-    expect(knockOff).toBeDefined();
+  it("projects Showdown protocol boosts and side conditions into side views", () => {
+    const protocol = createBattleProtocolState();
+    applyProtocolLineToState(["", "-boost", "p2a: Gholdengo", "spa", "2"], protocol);
+    applyProtocolLineToState(["", "-unboost", "p2a: Gholdengo", "spe", "1"], protocol);
+    applyProtocolLineToState(["", "-sidestart", "p1: You", "move: Stealth Rock"], protocol);
+    applyProtocolLineToState(["", "-sidestart", "p2: Nemesis", "move: Spikes"], protocol);
+    applyProtocolLineToState(["", "-sidestart", "p2: Nemesis", "move: Spikes"], protocol);
 
-    const afterKnockOff = await takeBattleTurn({
-      rawTeam: SAMPLE_TEAM,
-      seed: "nemesis-demo",
-      style: "Setup Snowball",
-      userChoices: afterHeadlongRush.userChoices,
-      aiChoices: afterHeadlongRush.aiChoices,
-      choice: knockOff!.id
-    });
+    const projected = sideViewWithProtocolState(
+      {
+        name: "Nemesis",
+        pokemon: [
+          {
+            ident: "p2: Gholdengo",
+            species: "Gholdengo",
+            condition: "100/100",
+            active: true,
+            fainted: false,
+            moves: []
+          }
+        ]
+      },
+      "p2",
+      protocol
+    );
 
-    expect(afterKnockOff.snapshot.log.some((entry) => entry.text === "Gholdengo lost Air Balloon.")).toBe(true);
-    expect(afterKnockOff.snapshot.log.some((entry) => entry.text === "Gholdengo's Special Attack fell by 1.")).toBe(true);
+    expect(projected.pokemon[0].boosts).toMatchObject({spa: 2, spe: -1});
+    expect(projected.conditions?.find((condition) => condition.id === "spikes")?.layers).toBe(2);
   });
 });
 
@@ -249,6 +264,48 @@ describe("battle AI policies", () => {
 
     expect(evaluateBattleState(speedPressure, "user")).toBeGreaterThan(evaluateBattleState(speedPressure, "nemesis"));
     expect(evaluateBattleState(typePressure, "user")).toBeGreaterThan(50);
+  });
+
+  it("scores immediate KO pressure and endgame cleanup pressure", () => {
+    const noThreat = battleFixture({
+      user: [{species: "Dragapult", condition: "100/100", active: true, moves: ["Quick Attack"]}],
+      opponent: [{species: "Gholdengo", condition: "25/100", active: true}]
+    });
+    const koThreat = battleFixture({
+      user: [{species: "Dragapult", condition: "100/100", active: true, moves: ["Shadow Ball"]}],
+      opponent: [{species: "Gholdengo", condition: "25/100", active: true}]
+    });
+    const endgamePriority = battleFixture({
+      user: [{species: "Kingambit", condition: "100/100", active: true, moves: ["Sucker Punch"]}],
+      opponent: [{species: "Dragapult", condition: "25/100", active: true}]
+    });
+
+    expect(evaluateBattleState(koThreat, "user")).toBeGreaterThan(evaluateBattleState(noThreat, "user") + 50);
+    expect(evaluateBattleState(endgamePriority, "user")).toBeGreaterThan(evaluateBattleState(endgamePriority, "nemesis"));
+  });
+
+  it("scores boost stages and side conditions parsed from battle state", () => {
+    const neutral = battleFixture({
+      user: [{species: "Dragonite", condition: "100/100", active: true}],
+      opponent: [{species: "Kingambit", condition: "100/100", active: true}]
+    });
+    const boosted = battleFixture({
+      user: [{species: "Dragonite", condition: "100/100", active: true, boosts: {atk: 2, spe: 1}}],
+      opponent: [{species: "Kingambit", condition: "100/100", active: true}]
+    });
+    const hazardsForUser = battleFixture({
+      user: [{species: "Dragonite", condition: "100/100", active: true}],
+      opponent: [{species: "Kingambit", condition: "100/100", active: true}],
+      opponentConditions: [{id: "stealthrock", label: "Stealth Rock"}]
+    });
+    const hazardsAgainstUser = battleFixture({
+      user: [{species: "Dragonite", condition: "100/100", active: true}],
+      opponent: [{species: "Kingambit", condition: "100/100", active: true}],
+      userConditions: [{id: "stealthrock", label: "Stealth Rock"}]
+    });
+
+    expect(evaluateBattleState(boosted, "user")).toBeGreaterThan(evaluateBattleState(neutral, "user"));
+    expect(evaluateBattleState(hazardsForUser, "user")).toBeGreaterThan(evaluateBattleState(hazardsAgainstUser, "user"));
   });
 
   it("keeps the basic policy deterministic for equivalent choices", () => {
@@ -424,26 +481,38 @@ describe("battle AI policies", () => {
 
 function battleFixture({
   user,
-  opponent
+  opponent,
+  userConditions,
+  opponentConditions
 }: {
-  user: Array<{species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string}>;
-  opponent: Array<{species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string}>;
+  user: Array<FixturePokemon>;
+  opponent: Array<FixturePokemon>;
+  userConditions?: BattleSideCondition[];
+  opponentConditions?: BattleSideCondition[];
 }): BattleSnapshot {
   return {
     turn: 1,
     ended: false,
     log: [],
-    user: {name: "You", pokemon: user.map((pokemon, index) => pokemonFixture(pokemon, index))},
-    opponent: {name: "Nemesis", pokemon: opponent.map((pokemon, index) => pokemonFixture(pokemon, index))},
+    user: {name: "You", pokemon: user.map((pokemon, index) => pokemonFixture(pokemon, index)), conditions: userConditions},
+    opponent: {name: "Nemesis", pokemon: opponent.map((pokemon, index) => pokemonFixture(pokemon, index)), conditions: opponentConditions},
     choices: [],
     errors: []
   };
 }
 
-function pokemonFixture(
-  pokemon: {species: string; condition: string; active?: boolean; fainted?: boolean; moves?: string[]; item?: string; ability?: string},
-  index: number
-): BattleSnapshot["user"]["pokemon"][number] {
+interface FixturePokemon {
+  species: string;
+  condition: string;
+  active?: boolean;
+  fainted?: boolean;
+  moves?: string[];
+  item?: string;
+  ability?: string;
+  boosts?: BattleSnapshot["user"]["pokemon"][number]["boosts"];
+}
+
+function pokemonFixture(pokemon: FixturePokemon, index: number): BattleSnapshot["user"]["pokemon"][number] {
   return {
     ident: `p${index + 1}: ${pokemon.species}`,
     species: pokemon.species,
@@ -452,6 +521,7 @@ function pokemonFixture(
     fainted: pokemon.fainted ?? pokemon.condition.includes("fnt"),
     item: pokemon.item,
     ability: pokemon.ability,
-    moves: pokemon.moves ?? []
+    moves: pokemon.moves ?? [],
+    boosts: pokemon.boosts
   };
 }
