@@ -86,6 +86,7 @@ Evolutionary AI training should be candidate-vs-candidate peer play.
 - [docs/project-vision.md](docs/project-vision.md)
 - [docs/mvp.md](docs/mvp.md)
 - [docs/battle-simulation.md](docs/battle-simulation.md)
+- [docs/cli-workflows.md](docs/cli-workflows.md)
 - [docs/ai-trainer-strategy.md](docs/ai-trainer-strategy.md)
 - [docs/ai-battler-implementation-plan.md](docs/ai-battler-implementation-plan.md)
 - [docs/ai-battler-architecture.md](docs/ai-battler-architecture.md)
