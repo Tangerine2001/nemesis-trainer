@@ -8,8 +8,7 @@ The app can already:
 
 - parse a Showdown-style imported user team
 - generate a deterministic nemesis trainer
-- start a Showdown-backed battle through `/api/battle/start`
-- advance turns through `/api/battle/turn`
+- start and advance a Showdown-backed battle in process through `lib/showdown/battle.ts`
 - replay accepted user choices from the initial teams and seed
 - expose legal user choices from Showdown requests
 - handle normal moves, switches, forced user switches, and forced AI switches
@@ -27,7 +26,7 @@ The target direction is:
 1. Showdown remains the only source of truth for battle mechanics.
 2. AI quality improves through policy selection, search depth, and heuristic tuning.
 3. Every AI action can eventually be explained in terms of pressure, damage, matchup, setup, or preservation.
-4. Runtime stays acceptable for a stateless web app.
+4. Runtime stays acceptable for local scripts and a future low-cost static/client surface.
 
 ## Non-Goals
 
@@ -71,7 +70,7 @@ Acceptance criteria:
 
 - Existing battle behavior remains deterministic.
 - Unit tests cover policy selection and fallback behavior.
-- UI/API do not know which policy implementation is used.
+- Callers do not know which policy implementation is used.
 
 ### Phase 2: Create a Replayable Simulation Helper
 
@@ -243,7 +242,5 @@ Before shipping each AI improvement:
 
 - `npm run test`
 - `npm run typecheck`
-- `npm run build`
-- browser smoke test: start battle, play through a KO, force a user switch, force an AI switch
-- check browser console for warnings/errors
+- local smoke test or focused unit test: start battle, play through a KO, force a user switch, force an AI switch
 - compare at least one deterministic seed before and after the change

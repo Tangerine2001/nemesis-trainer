@@ -1,6 +1,8 @@
 # CLI Workflows
 
-This document is the practical handoff for running Nemesis Trainer without a polished frontend. The battle AI and training loops are primarily driven through npm scripts and local API routes.
+This document is the practical handoff for running Nemesis Trainer after the frontend and API routes were removed.
+
+The repo is currently a local TypeScript library, test suite, and AI training workspace. There is no `app/` directory, no Next server, and no HTTP API.
 
 ## Setup And Checks
 
@@ -17,29 +19,17 @@ npm run typecheck
 npm test
 ```
 
-Run a production build when app routes, API routes, Next configuration, or bundled assets change:
+There is no production web build command right now because the frontend/backend app surface has been removed.
 
-```sh
-npm run build
-```
+## Local Usage
 
-## Local App And API
+Use the exported library functions directly from tests, scripts, or temporary local drivers:
 
-Start the local Next app:
+- `createAudit` in `lib/nemesis.ts`: parse and analyze a pasted Showdown team, then generate a nemesis trainer.
+- `startBattle` and `takeBattleTurn` in `lib/showdown/battle.ts`: run deterministic Showdown-backed battles in process.
+- `parseTeam`, `analyzeTeam`, and `generateBossTrainer`: lower-level pieces for focused experiments.
 
-```sh
-HOST=127.0.0.1 PORT=3000 npm run dev
-```
-
-The browser entry point is `http://localhost:3000`. The user-facing battle UI is currently a placeholder after the frontend battle interface was removed, so real battling and training work should use the CLI tools or API routes.
-
-Important API routes:
-
-- `POST /api/analyze`: parse and analyze a pasted Showdown team.
-- `POST /api/battle/start`: start a deterministic Showdown-backed battle session.
-- `POST /api/battle/turn`: submit a player choice and advance the battle.
-
-Use deterministic seeds in API payloads and CLI flags so runs can be reproduced.
+Use deterministic seeds in scripts and test payloads so runs can be reproduced.
 
 ## Arena Runs
 
@@ -91,21 +81,8 @@ jq '.config' .arena-runs/<report>.json
 
 Keep reports out of commits unless a user explicitly asks for a run artifact to be checked in.
 
-## Manual Battle Workflow
-
-Until a new battle UI exists, manual validation should use the local API or a purpose-built CLI driver. The previous browser-based playtesting used the local app as a shell around API state; it was not dependent on a stable production UI.
-
-Typical flow:
-
-1. Start the local app with `HOST=127.0.0.1 PORT=3000 npm run dev`.
-2. Call `POST /api/battle/start` with a Showdown team import, trainer style, and seed.
-3. Repeatedly inspect legal choices and call `POST /api/battle/turn` with the selected move or switch.
-4. Record the seed, trainer style, and final result in the relevant issue or handoff note.
-
 ## Troubleshooting
 
 - Use `--workers 1` when debugging deterministic behavior.
 - Use `--workers auto` for normal local training runs.
 - If a run is slow, profile before changing simulator semantics; all battle transitions should remain Showdown-backed.
-- If port `3000` is already in use, reuse the running app when it is this repo or start another port with `PORT=<port>`.
-- If generated Next artifacts appear while the dev server is running, avoid committing transient `.next` output.

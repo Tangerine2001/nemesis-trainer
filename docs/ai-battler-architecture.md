@@ -12,20 +12,17 @@ Pokemon Showdown
   -> normalized snapshot
   -> legal choices
   -> AI policy
-  -> API response
-  -> UI
+  -> local script, test, or future static/client surface
 ```
 
-The UI should never need to understand Showdown internals or minimax internals.
+Presentation code should never need to understand Showdown internals or minimax internals.
 
 ## Current Files
 
 - `lib/showdown/battle.ts`: starts and advances Showdown-backed battles
 - `lib/showdown/team.ts`: packs user and nemesis teams for Showdown
-- `app/api/battle/start/route.ts`: starts a battle
-- `app/api/battle/turn/route.ts`: applies a user choice
 - `lib/types.ts`: battle request, response, snapshot, choice, and view types
-- `app/page.tsx`: current single-page UI for audit and battle controls
+- `test/domain.test.ts`: current battle and policy coverage
 
 ## Recommended New Modules
 
@@ -121,7 +118,7 @@ Do not optimize this until correctness is locked down.
 
 ## Choice History
 
-The current API keeps user choice history and lets the server deterministically reconstruct AI choices from the seed and prior choices.
+The current in-process battle runner keeps user choice history and deterministically reconstructs AI choices from the seed and prior choices.
 
 For deeper AI, store enough history to reconstruct both sides exactly.
 
@@ -136,7 +133,7 @@ interface BattleChoiceRecord {
 }
 ```
 
-The public API can continue returning only the user choices if AI choices remain deterministic. Internally, explicit records will make search, replay debugging, and future sharing easier.
+Public callers can continue storing only the user choices if AI choices remain deterministic. Internally, explicit records will make search, replay debugging, and future sharing easier.
 
 ## State Evaluation Boundary
 

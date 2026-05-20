@@ -1,12 +1,12 @@
 # Nemesis Trainer
 
-`nemesis-trainer` is an early product repo for an adversarial team-testing website.
+`nemesis-trainer` is an early product repo for adversarial team-testing logic and AI battler experiments.
 
 Core idea:
 
 > Paste your team. Meet the trainer built to beat it.
 
-The site should generate a custom boss trainer that exposes weaknesses in the user's team, explain why the matchup is hard, and suggest counterplay or team edits. The goal is a useful, shareable tool that can run with minimal backend infrastructure and eventually support passive ad revenue.
+The product should eventually generate a custom boss trainer that exposes weaknesses in the user's team, explain why the matchup is hard, and suggest counterplay or team edits. The current repo intentionally has no frontend or backend app surface so the core logic can stay cheap to develop and run locally.
 
 ## Docs
 
@@ -16,9 +16,6 @@ The site should generate a custom boss trainer that exposes weaknesses in the us
 - [AI trainer strategy](docs/ai-trainer-strategy.md)
 - [Data and content plan](docs/data-and-content.md)
 - [Monetization and risk notes](docs/monetization-and-risk.md)
-- [Backend MVP](docs/backend-mvp.md)
-- [Backend later](docs/backend-later.md)
-- [Backend avoid for now](docs/backend-avoid-for-now.md)
 
 ## Battle Simulation
 
@@ -32,4 +29,4 @@ References:
 
 ## Current Status
 
-This repository is documentation-first. The first implementation should begin with team import, weakness analysis, deterministic boss trainer generation, and a thin Showdown-backed simulation boundary.
+The Next app and API routes have been removed. The remaining code is a TypeScript library and CLI/test workspace for team import, weakness analysis, deterministic boss trainer generation, Showdown-backed simulation, AI arena runs, and heuristic evolution.

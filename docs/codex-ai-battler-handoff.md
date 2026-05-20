@@ -1,6 +1,6 @@
 # Codex AI Battler Handoff
 
-Last updated: 2026-05-13
+Last updated: 2026-05-19
 
 This file exists so future Codex sessions can resume AI battler work without reconstructing the current state from chat history.
 
@@ -18,20 +18,20 @@ That commit added the greedy policy boundary, evaluator, AI choice replay tracki
 
 ## Current Battler Capabilities
 
-The app can:
+The local library can:
 
 - generate a deterministic nemesis trainer from a pasted team
 - start a battle against the trainer
-- submit user choices through API routes
+- submit user choices through in-process battle helpers
 - reconstruct battle state by replaying the initial seed and accepted choices
-- display active Pokemon, bench status, legal moves, legal switches, HP conditions, and battle log
+- produce active Pokemon, bench status, legal moves, legal switches, HP conditions, and battle log snapshots
 - handle forced user switches after a faint
 - auto-settle AI-only forced switches after the AI loses a Pokemon
 - reflect Showdown choice-lock behavior in legal move buttons
 - choose live AI trainer actions with default depth-2 minimax
 - fall back to greedy one-ply evaluation and basic rule scoring when search cannot complete
 
-Manual browser smoke already covered:
+Historical browser smoke already covered before the frontend/API removal:
 
 - Great Tusk KOing Glimmora
 - AI auto-switching to Dragonite
@@ -51,7 +51,6 @@ Use:
 ```sh
 npm run test
 npm run typecheck
-npm run build
 npm run ai:arena -- --seed smoke --rounds 2 --workers 2
 npm run ai:evolve -- --seed smoke --generations 1 --population 4 --workers 2
 npm run ai:train-target -- --seed smoke-target --generations 1 --population 4 --trainChallenges 2 --workers 2 --maxTurns 8
@@ -81,7 +80,7 @@ It does not yet:
 - search beyond the next visible user response
 - use type-matchup, speed, hazard, boost, item, or ability-aware heuristics
 - expose difficulty levels
-- explain AI choices in the UI
+- explain AI choices to callers
 - use a transposition cache
 
 ## Recommended Next Work
@@ -99,7 +98,7 @@ Then improve the evaluator before increasing search depth:
 1. Add type-matchup and speed-pressure scoring.
 2. Add hazard, boost/drop, item, and ability signals where the normalized snapshot exposes enough data.
 3. Add decision explanations from the selected policy result.
-4. Add difficulty levels only after depth-2 runtime is stable in browser smoke tests.
+4. Add difficulty levels only after depth-2 runtime is stable in local smoke tests.
 5. Use `docs/ai-arena-and-evolution.md` to compare heuristic changes before promoting them.
 
 Do not raise default depth to 3 until replay runtime has been profiled on several realistic teams.
@@ -117,9 +116,6 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 - `data/ai-arena/teams/`: curated 10-team Smogon SV OU arena pool plus source notes
 - `lib/showdown/team.ts`: Showdown team packing
 - `lib/types.ts`: battle snapshot and choice types
-- `app/api/battle/start/route.ts`: battle start route
-- `app/api/battle/turn/route.ts`: battle turn route
-- `app/page.tsx`: battle UI
 - `test/domain.test.ts`: current domain tests
 
 ## Known Design Decisions
@@ -135,25 +131,10 @@ Do not raise default depth to 3 until replay runtime has been profiled on severa
 - Search may be slow if implemented with naive full replay and high depth.
 - Arena simulation now caches request normalization and replay prefixes, but full Showdown replay is still the dominant cost for long peer-play training runs.
 - The evaluator will initially be imperfect; keep it small and testable.
-- Showdown protocol parsing may need more events as the UI and evaluator become richer.
+- Showdown protocol parsing may need more events as future presentation surfaces and the evaluator become richer.
 - Battle logs currently simplify some item-removal messages.
 - `gen9ou` should remain the first supported format until the loop is solid.
 
-## Browser Smoke Procedure
+## Local Smoke Procedure
 
-1. Start the dev server:
-
-```sh
-npm run dev -- --hostname 127.0.0.1 --port 3000
-```
-
-2. Open `http://127.0.0.1:3000`.
-3. Click `Battle trainer`.
-4. Play until at least one AI Pokemon faints.
-5. Confirm the AI switches automatically.
-6. Let one user Pokemon faint.
-7. Confirm only legal forced switches appear.
-8. Make a manual switch.
-9. Check the browser console for warnings and errors.
-
-Stop the dev server afterward.
+Use a focused test or temporary local driver that calls `startBattle` and `takeBattleTurn` directly. Play until at least one AI Pokemon faints, confirm the AI switches automatically, let one user Pokemon faint, confirm only legal forced switches appear, and make a manual switch.
