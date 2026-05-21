@@ -1,0 +1,40 @@
+{
+  "name": "nemesis-trainer-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "data:builder": "node scripts/build-builder-data.mjs",
+    "start": "next start",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.14.0",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwind-merge": "^3.4.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.0",
+    "minimist": "^1.2.8",
+    "nodemailer": "^8.0.7",
+    "postcss": "^8.5.14",
+    "tar": "^7.5.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.2.6",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3"
+  }
+}

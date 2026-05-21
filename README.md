@@ -27,6 +27,17 @@ References:
 - https://github.com/smogon/pokemon-showdown/blob/master/sim/README.md
 - https://github.com/smogon/pokemon-showdown/blob/master/COMMANDLINE.md
 
+## Frontend
+
+The Next.js app lives in `frontend` and uses Tailwind CSS with shadcn-style UI primitives.
+
+Useful commands from the repo root:
+
+- `npm run frontend:dev`
+- `npm run frontend:build`
+- `npm run frontend:typecheck`
+- `npm run frontend:lint`
+
 ## Current Status
 
-The Next app and API routes have been removed. The remaining code is a TypeScript library and CLI/test workspace for team import, weakness analysis, deterministic boss trainer generation, Showdown-backed simulation, AI arena runs, and heuristic evolution.
+The repo contains a standalone frontend shell plus a TypeScript library and CLI/test workspace for team import, weakness analysis, deterministic boss trainer generation, Showdown-backed simulation, AI arena runs, and heuristic evolution.

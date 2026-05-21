@@ -5,6 +5,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:data": "npm --prefix frontend run data:builder",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:typecheck": "npm --prefix frontend run typecheck",
+    "frontend:lint": "npm --prefix frontend run lint",
     "ai:arena": "tsx scripts/ai-arena.ts",
     "ai:evolve": "tsx scripts/ai-evolve.ts",
     "ai:train-target": "tsx scripts/ai-train-target.ts"
