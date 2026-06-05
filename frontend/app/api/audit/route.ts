@@ -1,18 +1,19 @@
 import {NextResponse} from "next/server";
 
 import {createAudit} from "@/lib/nemesis";
-import type {TrainerStyle} from "@/lib/types";
+import type {LeagueRules, TrainerStyle} from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {rawTeam?: string; seed?: string; style?: TrainerStyle; format?: "gen9ou"};
+    const body = (await request.json()) as {rawTeam?: string; seed?: string; style?: TrainerStyle; format?: "gen9ou"; leagueRules?: LeagueRules};
     const audit = createAudit({
       rawTeam: body.rawTeam ?? "",
       seed: body.seed,
       style: body.style,
-      format: body.format ?? "gen9ou"
+      format: body.format ?? "gen9ou",
+      leagueRules: body.leagueRules
     });
 
     return NextResponse.json({audit});

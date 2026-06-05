@@ -20,6 +20,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {Textarea} from "@/components/ui/textarea";
 import {
   draftToShowdownExport,
+  leagueRulesFromDraft,
   normalizeDraft,
   showdownExportToDraft,
   slotCompletion,
@@ -27,8 +28,8 @@ import {
   toId,
   validateDraftBasics
 } from "@/features/team-builder/draft";
-import {STAT_IDS, STAT_LABELS, type BuilderData, type BuilderSpecies, type TeamDraft, type TeamSlotDraft, type ValidationResponse} from "@/features/team-builder/types";
-import type {AuditResult} from "@/lib/types";
+import {STAT_IDS, STAT_LABELS, type BuilderData, type BuilderSpecies, type DraftIssue, type DraftLeagueRulesState, type TeamDraft, type TeamSlotDraft, type ValidationResponse} from "@/features/team-builder/types";
+import type {AuditResult, LeagueRules} from "@/lib/types";
 
 const SAMPLE_TEAM = `Great Tusk @ Heavy-Duty Boots
 Ability: Protosynthesis
@@ -83,7 +84,8 @@ export default function Home() {
   const builderExport = useMemo(() => draftToShowdownExport(draft), [draft]);
   const activeRawTeam = tab === "build" ? builderExport : rawTeam;
   const teamBlocks = useMemo(() => readTeamBlocks(activeRawTeam), [activeRawTeam]);
-  const basicIssues = useMemo(() => (tab === "build" ? validateDraftBasics(draft) : []), [draft, tab]);
+  const leagueRuleState = useMemo(() => leagueRulesFromDraft(draft, activeRawTeam), [activeRawTeam, draft]);
+  const basicIssues = useMemo(() => [...(tab === "build" ? validateDraftBasics(draft) : []), ...leagueRuleState.issues], [draft, leagueRuleState.issues, tab]);
   const hasFullTeam = teamBlocks.length >= 6;
   const topConcern = audit?.analysis.signals[0]?.label ?? (hasFullTeam ? "Ready for Showdown validation" : "Incomplete team");
 
@@ -99,10 +101,10 @@ export default function Home() {
       });
 
     queueMicrotask(() => {
-      const sharedTeam = readSharedTeam();
-      if (sharedTeam) {
-        setRawTeam(sharedTeam);
-        setDraft(normalizeDraft(showdownExportToDraft(sharedTeam)));
+      const shared = readSharedState();
+      if (shared.rawTeam) {
+        setRawTeam(shared.rawTeam);
+        setDraft(normalizeDraft({...showdownExportToDraft(shared.rawTeam), leagueRules: shared.leagueRules}));
         setTab("build");
         setStatus("Loaded shared team.");
       } else {
@@ -165,13 +167,14 @@ export default function Home() {
       const response = await fetch("/api/team/validate", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(tab === "build" ? {draft} : {rawTeam: activeRawTeam})
+        body: JSON.stringify(teamRequestPayload(tab === "build" ? {draft} : {rawTeam: activeRawTeam}, leagueRuleState.leagueRules))
       });
       const body = (await response.json()) as ValidationResponse & {error?: string};
       if (!response.ok) throw new Error(body.error ?? "Validation failed.");
-      setValidation(body);
-      setStatus(body.ok ? "Showdown validation passed." : "Showdown found issues to fix.");
-      return body;
+      const nextValidation = withLocalIssues(body, leagueRuleState.issues);
+      setValidation(nextValidation);
+      setStatus(nextValidation.ok ? "Showdown validation passed." : "Showdown found issues to fix.");
+      return nextValidation;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Validation failed.";
       setValidation({...DEFAULT_VALIDATION, problems: [message]});
@@ -187,7 +190,10 @@ export default function Home() {
     setStatus("");
     setAudit(null);
     try {
-      const validationResult = await validateForAudit(tab === "build" ? {draft} : {rawTeam: activeRawTeam});
+      const validationResult = await validateForAudit(
+        teamRequestPayload(tab === "build" ? {draft} : {rawTeam: activeRawTeam}, leagueRuleState.leagueRules),
+        leagueRuleState.issues
+      );
       setValidation(validationResult);
       if (!validationResult.ok) {
         setStatus("Fix validation issues before generating a Nemesis trainer.");
@@ -197,7 +203,7 @@ export default function Home() {
       const response = await fetch("/api/audit", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({rawTeam: activeRawTeam, seed: draft.seed, style: draft.style, format: "gen9ou"})
+        body: JSON.stringify({rawTeam: activeRawTeam, seed: draft.seed, style: draft.style, format: "gen9ou", leagueRules: leagueRuleState.leagueRules})
       });
       const body = (await response.json()) as {audit?: AuditResult; error?: string};
       if (!response.ok || !body.audit) throw new Error(body.error ?? "Audit failed.");
@@ -214,7 +220,7 @@ export default function Home() {
     setBusyAction("share");
     try {
       const url = new URL(window.location.href);
-      url.searchParams.set("team", encodeSharePayload(activeRawTeam));
+      url.searchParams.set("team", encodeSharePayload(activeRawTeam, draft.leagueRules));
       await navigator.clipboard?.writeText(url.toString());
       window.history.replaceState(null, "", url);
       setStatus("Share URL copied and added to the address bar.");
@@ -615,6 +621,7 @@ function AuditPanel({
   onGenerate: () => void;
 }) {
   const hasFullTeam = teamBlocks.length >= 6;
+  const visibleIssues = mergeIssues([...validation.issues, ...(audit?.leagueRuleIssues ?? [])]);
 
   return (
     <div className="grid gap-4">
@@ -665,6 +672,7 @@ function AuditPanel({
                 <option value="Setup Snowball">Setup Snowball</option>
               </select>
             </Field>
+            <AdvancedLeagueRules draft={draft} activeRawTeam={activeRawTeam} onDraftChange={onDraftChange} />
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -682,6 +690,13 @@ function AuditPanel({
           {validation.problems.length > 0 && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               {validation.problems.slice(0, 6).map((problem, index) => <p key={index}>{problem}</p>)}
+            </div>
+          )}
+          {visibleIssues.length > 0 && (
+            <div className="rounded-md border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+              {visibleIssues.slice(0, 6).map((issue, index) => (
+                <p key={index} className={issue.severity === "error" ? "font-medium text-destructive" : undefined}>{issue.message}</p>
+              ))}
             </div>
           )}
         </CardContent>
@@ -735,6 +750,69 @@ function AuditPanel({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function AdvancedLeagueRules({
+  draft,
+  activeRawTeam,
+  onDraftChange
+}: {
+  draft: TeamDraft;
+  activeRawTeam: string;
+  onDraftChange: (draft: TeamDraft) => void;
+}) {
+  const rules = draft.leagueRules;
+  const resolved = leagueRulesFromDraft(draft, activeRawTeam);
+  const selectedMegaSpecies = resolved.megaCandidates.includes(rules.selectedMegaSpecies) ? rules.selectedMegaSpecies : "";
+
+  function updateRules(next: Partial<DraftLeagueRulesState>) {
+    onDraftChange({...draft, leagueRules: {...rules, ...next}});
+  }
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <label className="flex items-center justify-between gap-3 text-sm font-medium">
+        <span>Advanced League Rules</span>
+        <input
+          type="checkbox"
+          checked={rules.enabled}
+          onChange={(event) => updateRules({enabled: event.target.checked})}
+          className="size-4 accent-primary"
+          aria-label="Enable draft Mega rules"
+        />
+      </label>
+
+      {rules.enabled && (
+        <div className="mt-3 grid gap-3">
+          <Field label="Mega Stones">
+            <textarea
+              value={rules.megaStoneMappingsText}
+              onChange={(event) => updateRules({megaStoneMappingsText: event.target.value})}
+              className="min-h-20 w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              placeholder={"Mega Delphox = Delphoxite\nMega Golurk = Golurkite"}
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="Selected Mega">
+            <select
+              value={selectedMegaSpecies}
+              onChange={(event) => updateRules({selectedMegaSpecies: event.target.value})}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <option value="">No selected Mega</option>
+              {resolved.megaCandidates.map((species) => (
+                <option key={species} value={species}>{species}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">Forced stones</Badge>
+            <Badge variant="outline">One Mega</Badge>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -804,7 +882,7 @@ function moveOptions(data: BuilderData | null, species: BuilderSpecies | undefin
   return data.moves.filter((move) => speciesMoves.has(move.id));
 }
 
-async function validateForAudit(payload: {draft?: TeamDraft; rawTeam?: string}) {
+async function validateForAudit(payload: TeamRequestPayload, localIssues: DraftIssue[]) {
   const response = await fetch("/api/team/validate", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -812,27 +890,62 @@ async function validateForAudit(payload: {draft?: TeamDraft; rawTeam?: string}) 
   });
   const body = (await response.json()) as ValidationResponse & {error?: string};
   if (!response.ok) throw new Error(body.error ?? "Validation failed.");
-  return body;
+  return withLocalIssues(body, localIssues);
 }
 
-function encodeSharePayload(rawTeam: string) {
-  const json = JSON.stringify({rawTeam});
+interface SharedPagePayload {
+  rawTeam?: string;
+  leagueRules?: DraftLeagueRulesState;
+}
+
+interface TeamRequestPayload {
+  draft?: TeamDraft;
+  rawTeam?: string;
+  leagueRules?: LeagueRules;
+}
+
+function teamRequestPayload(payload: {draft?: TeamDraft; rawTeam?: string}, leagueRules: LeagueRules | undefined): TeamRequestPayload {
+  return leagueRules ? {...payload, leagueRules} : payload;
+}
+
+type DisplayIssue = Pick<DraftIssue, "severity" | "message" | "slot">;
+
+function withLocalIssues(validation: ValidationResponse, localIssues: DraftIssue[]): ValidationResponse {
+  return {
+    ...validation,
+    ok: validation.ok && localIssues.every((issue) => issue.severity !== "error"),
+    issues: mergeIssues([...localIssues, ...validation.issues])
+  };
+}
+
+function mergeIssues<TIssue extends DisplayIssue>(issues: TIssue[]): TIssue[] {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.severity}:${issue.slot ?? ""}:${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function encodeSharePayload(rawTeam: string, leagueRules: DraftLeagueRulesState) {
+  const json = JSON.stringify({rawTeam, leagueRules});
   const bytes = new TextEncoder().encode(json);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function readSharedTeam() {
+function readSharedState(): SharedPagePayload {
   const code = new URLSearchParams(window.location.search).get("team");
-  if (!code) return "";
+  if (!code) return {};
   try {
     const base64 = code.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(code.length / 4) * 4, "=");
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as {rawTeam?: string};
-    return parsed.rawTeam ?? "";
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as SharedPagePayload;
+    return {rawTeam: parsed.rawTeam ?? "", leagueRules: parsed.leagueRules};
   } catch {
-    return "";
+    return {};
   }
 }

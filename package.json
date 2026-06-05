@@ -11,6 +11,7 @@
     "frontend:typecheck": "npm --prefix frontend run typecheck",
     "frontend:lint": "npm --prefix frontend run lint",
     "ai:arena": "tsx scripts/ai-arena.ts",
+    "draft:test": "tsx scripts/draft-test.ts",
     "ai:evolve": "tsx scripts/ai-evolve.ts",
     "ai:train-target": "tsx scripts/ai-train-target.ts"
   },

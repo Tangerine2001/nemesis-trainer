@@ -1,4 +1,5 @@
-import {STAT_IDS, STAT_LABELS, type DraftIssue, type StatId, type StatTable, type TeamDraft, type TeamSlotDraft} from "./types";
+import type {LeagueRules} from "@/lib/types";
+import {STAT_IDS, STAT_LABELS, type DraftIssue, type DraftLeagueRulesState, type StatId, type StatTable, type TeamDraft, type TeamSlotDraft} from "./types";
 
 const EMPTY_STATS: StatTable = {hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0};
 const FULL_IVS: StatTable = {hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31};
@@ -40,7 +41,8 @@ export function createEmptyDraft(): TeamDraft {
     format: "gen9ou",
     slots: Array.from({length: 6}, emptySlot),
     seed: "nemesis-demo",
-    style: "auto"
+    style: "auto",
+    leagueRules: emptyLeagueRules()
   };
 }
 
@@ -51,7 +53,26 @@ export function normalizeDraft(input: Partial<TeamDraft> | undefined): TeamDraft
     format: "gen9ou",
     seed: input.seed?.trim() || base.seed,
     style: input.style ?? base.style,
-    slots: Array.from({length: 6}, (_, index) => normalizeSlot(input.slots?.[index]))
+    slots: Array.from({length: 6}, (_, index) => normalizeSlot(input.slots?.[index])),
+    leagueRules: normalizeLeagueRules(input.leagueRules)
+  };
+}
+
+export function emptyLeagueRules(): DraftLeagueRulesState {
+  return {
+    enabled: false,
+    selectedMegaSpecies: "",
+    megaStoneMappingsText: ""
+  };
+}
+
+export function normalizeLeagueRules(input: Partial<DraftLeagueRulesState> | undefined): DraftLeagueRulesState {
+  const base = emptyLeagueRules();
+  if (!input) return base;
+  return {
+    enabled: Boolean(input.enabled),
+    selectedMegaSpecies: input.selectedMegaSpecies?.trim() ?? "",
+    megaStoneMappingsText: input.megaStoneMappingsText ?? ""
   };
 }
 
@@ -130,6 +151,76 @@ export function validateDraftBasics(draft: TeamDraft): DraftIssue[] {
   return issues;
 }
 
+export function parseMegaStoneMappings(text: string): {mappings: Record<string, string>; issues: DraftIssue[]} {
+  const mappings: Record<string, string> = {};
+  const issues: DraftIssue[] = [];
+
+  text.split("\n").forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) {
+      issues.push({severity: "warning", message: `Mega Stone mapping line ${index + 1} must use "Species = Stone".`});
+      return;
+    }
+
+    const species = trimmed.slice(0, separatorIndex).trim();
+    const item = trimmed.slice(separatorIndex + 1).trim();
+    if (!species || !item) {
+      issues.push({severity: "warning", message: `Mega Stone mapping line ${index + 1} is missing a species or stone.`});
+      return;
+    }
+
+    const duplicateKey = Object.keys(mappings).find((candidate) => toId(candidate) === toId(species));
+    if (duplicateKey) {
+      issues.push({severity: "warning", message: `Mega Stone mapping for ${species} replaced an earlier line.`});
+      delete mappings[duplicateKey];
+    }
+
+    mappings[species] = item;
+  });
+
+  return {mappings, issues};
+}
+
+export function formatMegaStoneMappings(mappings: Record<string, string>): string {
+  return Object.entries(mappings)
+    .filter(([species, item]) => species.trim() && item.trim())
+    .map(([species, item]) => `${species.trim()} = ${item.trim()}`)
+    .join("\n");
+}
+
+export function megaCandidatesFromTeam(rawTeam: string, mappings: Record<string, string>): string[] {
+  const mappingIds = new Set(Object.keys(mappings).map(toId));
+  const candidates = readTeamSpecies(rawTeam).filter((species) => {
+    const speciesId = toId(species);
+    const baseSpecies = baseSpeciesFromMegaName(species);
+    return Boolean(baseSpecies) || mappingIds.has(speciesId) || (baseSpecies ? mappingIds.has(toId(baseSpecies)) : false);
+  });
+  return Array.from(new Set(candidates));
+}
+
+export function leagueRulesFromDraft(draft: TeamDraft, rawTeam: string): {leagueRules?: LeagueRules; issues: DraftIssue[]; megaCandidates: string[]} {
+  if (!draft.leagueRules.enabled) return {issues: [], megaCandidates: []};
+
+  const parsedMappings = parseMegaStoneMappings(draft.leagueRules.megaStoneMappingsText);
+  const megaCandidates = megaCandidatesFromTeam(rawTeam, parsedMappings.mappings);
+  const selectedMegaSpecies = megaCandidates.includes(draft.leagueRules.selectedMegaSpecies) ? draft.leagueRules.selectedMegaSpecies : "";
+
+  return {
+    leagueRules: {
+      megaMode: "draft-forced-stones",
+      maxMegaEvolutionsPerBattle: 1,
+      selectedMegaSpecies: selectedMegaSpecies || undefined,
+      megaStoneBySpecies: parsedMappings.mappings,
+      inferMegaStoneNames: true
+    },
+    issues: parsedMappings.issues,
+    megaCandidates
+  };
+}
+
 export function slotCompletion(slot: TeamSlotDraft) {
   if (!slot.species.trim()) return 0;
   const checks = [slot.item, slot.ability, slot.teraType, slot.nature, ...slot.moves];
@@ -143,6 +234,30 @@ export function statTotal(stats: StatTable) {
 
 export function toId(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function readTeamSpecies(rawTeam: string): string[] {
+  return rawTeam
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+    .map(speciesFromBlock)
+    .filter(Boolean);
+}
+
+function speciesFromBlock(block: string): string {
+  const header = block.split("\n")[0] ?? "";
+  const [identityPart] = header.split("@").map((part) => part.trim());
+  const parentheticalSpecies = identityPart.match(/^(.*?)\s*\((.*?)\)$/);
+  return parentheticalSpecies?.[2]?.trim() || identityPart.trim();
+}
+
+function baseSpeciesFromMegaName(species: string): string {
+  const trimmed = species.trim();
+  return /^mega\s+/i.test(trimmed) ? trimmed.replace(/^mega\s+/i, "").trim() : "";
 }
 
 function slotToShowdownExport(slot: TeamSlotDraft): string {

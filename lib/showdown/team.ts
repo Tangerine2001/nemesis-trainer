@@ -1,6 +1,7 @@
 import {Teams} from "pokemon-showdown/dist/sim/teams";
 import {TeamValidator} from "pokemon-showdown/dist/sim/team-validator";
 import type {PokemonSet} from "pokemon-showdown/dist/sim/teams";
+import {hasActiveLeagueRules} from "@/lib/rules/league-rules";
 import type {BossPokemon, StatId, SupportedFormat, Team, TeamMember} from "@/lib/types";
 
 const STAT_IDS: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
@@ -42,7 +43,7 @@ export interface PackedTeamResult {
 }
 
 export function packUserTeam(team: Team): PackedTeamResult {
-  const imported = Teams.import(team.rawText);
+  const imported = hasActiveLeagueRules(team) ? undefined : Teams.import(team.rawText);
   const sets = imported ?? team.members.map(teamMemberToSet);
   return validateAndPack(sets, team.format);
 }

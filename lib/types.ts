@@ -25,11 +25,30 @@ export type PokemonType = (typeof POKEMON_TYPES)[number];
 export type SupportedFormat = "gen9ou";
 export type TrainerStyle = "auto" | "Fast Pressure" | "Wallbreaker" | "Setup Snowball";
 export type StatId = "hp" | "atk" | "def" | "spa" | "spd" | "spe";
+export type MegaMode = "standard" | "draft-forced-stones";
+
+export interface LeagueRules {
+  megaMode?: MegaMode;
+  maxMegaEvolutionsPerBattle?: number;
+  selectedMegaSpecies?: string;
+  megaStoneBySpecies?: Record<string, string>;
+  inferMegaStoneNames?: boolean;
+}
+
+export interface LockedItem {
+  item: string;
+  reason: "mega-stone";
+  sourceSpecies: string;
+  replacedItem?: string;
+}
 
 export interface TeamMember {
   name: string;
   species: string;
   item?: string;
+  lockedItem?: LockedItem;
+  canMegaEvolve?: boolean;
+  mayMegaEvolveThisBattle?: boolean;
   ability?: string;
   level?: number;
   teraType?: PokemonType;
@@ -43,6 +62,7 @@ export interface Team {
   format: SupportedFormat;
   members: TeamMember[];
   rawText: string;
+  leagueRules?: LeagueRules;
 }
 
 export interface ParseIssue {
@@ -118,6 +138,7 @@ export interface AuditRequest {
   format?: SupportedFormat;
   seed?: string;
   style?: TrainerStyle;
+  leagueRules?: LeagueRules;
 }
 
 export interface BattleAiWeights {
@@ -140,6 +161,7 @@ export interface AuditResult {
   seed: string;
   team: Team;
   parseIssues: ParseIssue[];
+  leagueRuleIssues: ParseIssue[];
   analysis: AnalysisReport;
   boss: BossTrainer;
   shareCode: string;
@@ -151,6 +173,7 @@ export interface SharePayload {
   rawTeam: string;
   seed: string;
   style: TrainerStyle;
+  leagueRules?: LeagueRules;
 }
 
 export type BattleChoiceKind = "move" | "switch";

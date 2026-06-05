@@ -25,6 +25,7 @@
     "**/*.tsx"
   ],
   "exclude": [
+    "frontend",
     "node_modules"
   ]
 }

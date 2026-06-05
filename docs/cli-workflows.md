@@ -42,6 +42,44 @@ npm run ai:arena -- --seed arena-medium --rounds 4 --maxPairs 5 --maxTurns 120 -
 
 Arena matches use swapped team pairs. An agent only wins the match if it wins both sides of a team assignment. If no agent does that within the configured pair limit, the match is recorded as a shared-win tie.
 
+## Draft Test Runs
+
+Use the draft test runner to sample bring-6 matchups from two roster files. For Champions prep, the expected input is just the drafted Pokemon names:
+
+```text
+Sneasler
+Mega Delphox
+Archaludon
+Clefable
+Noivern
+Mega Golurk
+```
+
+```sh
+npm run draft:test -- --you data/drafts/me.txt --opp data/drafts/league8.txt --seed league8-smoke --runs 20 --maxTurns 80
+```
+
+Roster files can contain more than six Pokemon. If no bring list is provided, the runner samples deterministic bring-6 combinations from each roster and rotates leads. Reports are written to `.arena-runs/`.
+
+Draft test runs generate sets before simulation. If you provide full or partial Showdown blocks instead of plain names, existing moves, abilities, natures, items, and EV shape are preserved where possible; missing moves are chosen deterministically from Showdown's legal move pool with obviously bad moves filtered out. The fill layer uses Champions EV rules: no IV choices, max 32 EVs per stat, and max 66 total EVs.
+
+Useful options:
+
+```sh
+npm run draft:test -- --you data/drafts/me.txt --opp data/drafts/league8.txt --yourBring "Sneasler,Archaludon,Noivern,Clefable,Mega Delphox,Mega Golurk" --oppLead Glimmora --runs 10
+npm run draft:test -- --you data/drafts/me.txt --opp data/drafts/league8.txt --draftMega --megaStones data/drafts/mega-stones.txt --yourMega "Mega Delphox" --oppMega "Mega Starmie"
+```
+
+`--megaStones` uses one mapping per line:
+
+```text
+Mega Delphox = Delphoxite
+Mega Golurk = Golurkite
+Mega Starmie = Starmite
+```
+
+Draft Mega rules model the forced-item cost and one selected Mega per side. Custom Mega stats/forms still require future Showdown mod data.
+
 ## Evolution Runs
 
 Use heuristic evolution to search evaluator weights through peer-play:

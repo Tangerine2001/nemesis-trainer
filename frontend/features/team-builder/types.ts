@@ -78,11 +78,18 @@ export interface TeamSlotDraft {
   shiny: boolean;
 }
 
+export interface DraftLeagueRulesState {
+  enabled: boolean;
+  selectedMegaSpecies: string;
+  megaStoneMappingsText: string;
+}
+
 export interface TeamDraft {
   format: "gen9ou";
   slots: TeamSlotDraft[];
   seed: string;
   style: "auto" | "Fast Pressure" | "Wallbreaker" | "Setup Snowball";
+  leagueRules: DraftLeagueRulesState;
 }
 
 export interface DraftIssue {

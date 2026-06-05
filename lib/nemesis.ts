@@ -1,5 +1,6 @@
 import {analyzeTeam} from "@/lib/analysis/analyze";
 import {generateBossTrainer} from "@/lib/boss-generator/generate";
+import {applyLeagueRules} from "@/lib/rules/league-rules";
 import {parseTeam} from "@/lib/team-parser/parser";
 import type {AuditRequest, AuditResult, SupportedFormat, TrainerStyle} from "@/lib/types";
 import {encodeSharePayload} from "@/lib/share/payload";
@@ -17,20 +18,27 @@ export function createAudit(request: AuditRequest): AuditResult {
     throw new Error(parsed.issues.map((issue) => issue.message).join(" "));
   }
 
-  const analysis = analyzeTeam(parsed.team);
-  const boss = generateBossTrainer(parsed.team, analysis, seed, style);
+  const resolved = applyLeagueRules(parsed.team, request.leagueRules);
+  if (resolved.issues.some((issue) => issue.severity === "error")) {
+    throw new Error(resolved.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message).join(" "));
+  }
+
+  const analysis = analyzeTeam(resolved.team);
+  const boss = generateBossTrainer(resolved.team, analysis, seed, style);
   const shareCode = encodeSharePayload({
     format,
-    rawTeam: parsed.team.rawText,
+    rawTeam: resolved.team.rawText,
     seed,
-    style
+    style,
+    leagueRules: request.leagueRules
   });
 
   return {
     format,
     seed,
-    team: parsed.team,
-    parseIssues: parsed.issues,
+    team: resolved.team,
+    parseIssues: [...parsed.issues, ...resolved.issues],
+    leagueRuleIssues: resolved.issues,
     analysis,
     boss,
     shareCode

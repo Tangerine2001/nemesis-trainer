@@ -4,8 +4,22 @@ import {rankBattleChoices} from "@/lib/battle-ai/choice-pruning";
 import {evaluateBattleState} from "@/lib/battle-ai/evaluate";
 import {chooseGreedyBattleAction} from "@/lib/battle-ai/greedy-policy";
 import {chooseMinimaxBattleAction} from "@/lib/battle-ai/minimax-policy";
+import {
+  completeDraftRosterBlock,
+  normalizeChampionsEvs
+} from "@/lib/draft-lab/draft-sets";
+import {
+  createEmptyDraft,
+  formatMegaStoneMappings,
+  leagueRulesFromDraft,
+  megaCandidatesFromTeam,
+  normalizeDraft,
+  parseMegaStoneMappings
+} from "@/frontend/features/team-builder/draft";
 import {analyzeTeam} from "@/lib/analysis/analyze";
+import {parseDraftRoster, runDraftTest} from "@/lib/draft-lab/draft-runner";
 import {createAudit} from "@/lib/nemesis";
+import {applyLeagueRules} from "@/lib/rules/league-rules";
 import {SAMPLE_TEAM, SLOW_SAMPLE_TEAM} from "@/lib/sample-teams";
 import {decodeSharePayload, encodeSharePayload} from "@/lib/share/payload";
 import {startBattle, takeBattleTurn} from "@/lib/showdown/battle";
@@ -74,6 +88,257 @@ describe("share payloads", () => {
       seed: "abc",
       style: "Wallbreaker"
     });
+  });
+
+  it("round-trips optional league rules", () => {
+    const code = encodeSharePayload({
+      rawTeam: SAMPLE_TEAM,
+      format: "gen9ou",
+      seed: "abc",
+      style: "Wallbreaker",
+      leagueRules: {
+        megaMode: "draft-forced-stones",
+        selectedMegaSpecies: "Great Tusk",
+        megaStoneBySpecies: {"Great Tusk": "Great Tuskite"}
+      }
+    });
+
+    expect(decodeSharePayload(code).leagueRules).toMatchObject({
+      megaMode: "draft-forced-stones",
+      selectedMegaSpecies: "Great Tusk",
+      megaStoneBySpecies: {"Great Tusk": "Great Tuskite"}
+    });
+  });
+});
+
+describe("draft league rules", () => {
+  it("leaves teams unchanged when draft Mega rules are disabled", () => {
+    const parsed = parseTeam(SAMPLE_TEAM);
+    expect(parsed.team).toBeDefined();
+
+    const resolved = applyLeagueRules(parsed.team!, {megaMode: "standard"});
+
+    expect(resolved.issues).toEqual([]);
+    expect(resolved.team).toBe(parsed.team);
+    expect(resolved.team.members[0].lockedItem).toBeUndefined();
+  });
+
+  it("forces configured Mega Stones and reports replaced items", () => {
+    const parsed = parseTeam(SAMPLE_TEAM);
+    expect(parsed.team).toBeDefined();
+
+    const resolved = applyLeagueRules(parsed.team!, {
+      megaMode: "draft-forced-stones",
+      selectedMegaSpecies: "Great Tusk",
+      megaStoneBySpecies: {"Great Tusk": "Great Tuskite", Gholdengo: "Gholdengite"}
+    });
+
+    expect(resolved.issues).toContainEqual({
+      severity: "warning",
+      memberIndex: 0,
+      message: "Great Tusk must hold Great Tuskite under draft Mega rules; Heavy-Duty Boots was ignored."
+    });
+    const greatTusk = resolved.team.members.find((member) => member.species === "Great Tusk");
+    const gholdengo = resolved.team.members.find((member) => member.species === "Gholdengo");
+
+    expect(greatTusk).toMatchObject({
+      item: "Great Tuskite",
+      canMegaEvolve: true,
+      mayMegaEvolveThisBattle: true,
+      lockedItem: {
+        item: "Great Tuskite",
+        reason: "mega-stone",
+        sourceSpecies: "Great Tusk",
+        replacedItem: "Heavy-Duty Boots"
+      }
+    });
+    expect(gholdengo).toMatchObject({
+      item: "Gholdengite",
+      canMegaEvolve: true,
+      mayMegaEvolveThisBattle: false
+    });
+  });
+
+  it("infers display stones for Mega-prefixed species", () => {
+    const parsed = parseTeam(`Mega Delphox
+Ability: Blaze
+- Psychic`);
+    expect(parsed.team).toBeDefined();
+
+    const resolved = applyLeagueRules(parsed.team!, {megaMode: "draft-forced-stones"});
+
+    expect(resolved.team.members[0]).toMatchObject({
+      item: "Delphoxite",
+      canMegaEvolve: true,
+      lockedItem: {item: "Delphoxite", reason: "mega-stone", sourceSpecies: "Delphox"}
+    });
+  });
+
+  it("rejects a selected Mega that is not item-locked to a Mega Stone", () => {
+    expect(() =>
+      createAudit({
+        rawTeam: SAMPLE_TEAM,
+        seed: "fixed-seed",
+        leagueRules: {
+          megaMode: "draft-forced-stones",
+          selectedMegaSpecies: "Gholdengo",
+          megaStoneBySpecies: {"Great Tusk": "Great Tuskite"}
+        }
+      })
+    ).toThrow(/Selected Mega "Gholdengo" is not item-locked to a Mega Stone/);
+  });
+
+  it("packs resolved forced items instead of raw import items", () => {
+    const audit = createAudit({
+      rawTeam: SAMPLE_TEAM,
+      seed: "fixed-seed",
+      leagueRules: {
+        megaMode: "draft-forced-stones",
+        selectedMegaSpecies: "Great Tusk",
+        megaStoneBySpecies: {"Great Tusk": "Leftovers"}
+      }
+    });
+
+    const user = packUserTeam(audit.team);
+
+    expect(user.sets[0].item).toBe("Leftovers");
+    expect(user.sets[0].item).not.toBe("Heavy-Duty Boots");
+  });
+});
+
+describe("frontend draft league rule helpers", () => {
+  it("normalizes draft Mega rules to disabled defaults", () => {
+    const draft = normalizeDraft({seed: "abc"});
+
+    expect(draft.leagueRules).toEqual({
+      enabled: false,
+      selectedMegaSpecies: "",
+      megaStoneMappingsText: ""
+    });
+  });
+
+  it("parses and formats Mega Stone mappings", () => {
+    const parsed = parseMegaStoneMappings(" Mega Delphox = Delphoxite \n\nMega Golurk = Golurkite");
+
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.mappings).toEqual({
+      "Mega Delphox": "Delphoxite",
+      "Mega Golurk": "Golurkite"
+    });
+    expect(formatMegaStoneMappings(parsed.mappings)).toBe("Mega Delphox = Delphoxite\nMega Golurk = Golurkite");
+  });
+
+  it("reports malformed Mega Stone mapping lines as warnings", () => {
+    const parsed = parseMegaStoneMappings("Mega Delphox Delphoxite\nMega Golurk = ");
+
+    expect(parsed.mappings).toEqual({});
+    expect(parsed.issues.map((issue) => issue.message)).toEqual([
+      'Mega Stone mapping line 1 must use "Species = Stone".',
+      "Mega Stone mapping line 2 is missing a species or stone."
+    ]);
+  });
+
+  it("extracts Mega candidates from Mega-prefixed names and mappings", () => {
+    const rawTeam = `Mega Delphox @ Choice Scarf
+Ability: Blaze
+- Psychic
+
+Golurk @ Leftovers
+Ability: Iron Fist
+- Earthquake`;
+
+    expect(megaCandidatesFromTeam(rawTeam, {Golurk: "Golurkite"})).toEqual(["Mega Delphox", "Golurk"]);
+  });
+
+  it("builds optional league rules only when enabled", () => {
+    const disabled = createEmptyDraft();
+    expect(leagueRulesFromDraft(disabled, SAMPLE_TEAM)).toEqual({issues: [], megaCandidates: []});
+
+    const enabled = normalizeDraft({
+      ...disabled,
+      leagueRules: {
+        enabled: true,
+        selectedMegaSpecies: "Great Tusk",
+        megaStoneMappingsText: "Great Tusk = Great Tuskite"
+      }
+    });
+
+    expect(leagueRulesFromDraft(enabled, SAMPLE_TEAM)).toMatchObject({
+      leagueRules: {
+        megaMode: "draft-forced-stones",
+        maxMegaEvolutionsPerBattle: 1,
+        selectedMegaSpecies: "Great Tusk",
+        megaStoneBySpecies: {"Great Tusk": "Great Tuskite"}
+      },
+      issues: [],
+      megaCandidates: ["Great Tusk"]
+    });
+  });
+});
+
+describe("draft battle test runner", () => {
+  it("parses plain Pokemon lists as draft rosters", () => {
+    const roster = parseDraftRoster("Sneasler\nMega Delphox\nArchaludon, Clefable");
+
+    expect(roster).toEqual([
+      {slot: 1, species: "Sneasler", rawBlock: "Sneasler"},
+      {slot: 2, species: "Mega Delphox", rawBlock: "Mega Delphox"},
+      {slot: 3, species: "Archaludon", rawBlock: "Archaludon"},
+      {slot: 4, species: "Clefable", rawBlock: "Clefable"}
+    ]);
+  });
+
+  it("fills draft roster skeletons with Champions EV caps and no IV lines", () => {
+    const completed = completeDraftRosterBlock("Delphox\nIVs: 0 Atk", "gen9ou", "set-seed");
+    const parsed = parseTeam(completed.rawBlock);
+    const member = parsed.team?.members[0];
+
+    expect(member?.ability).toBeTruthy();
+    expect(member?.moves).toHaveLength(4);
+    expect(completed.rawBlock).not.toContain("IVs:");
+    expect(Math.max(...Object.values(member?.evs ?? {}))).toBeLessThanOrEqual(32);
+    expect(Object.values(member?.evs ?? {}).reduce((total, value) => total + value, 0)).toBeLessThanOrEqual(66);
+    expect(packUserTeam(parsed.team!).problems).toEqual([]);
+  });
+
+  it("normalizes Showdown EV spreads into the Champions budget", () => {
+    expect(normalizeChampionsEvs({spa: 252, spd: 4, spe: 252})).toEqual({spa: 32, spd: 2, spe: 32});
+  });
+
+  it("parses draft roster members from Showdown blocks", () => {
+    const roster = parseDraftRoster(SAMPLE_TEAM);
+
+    expect(roster).toHaveLength(6);
+    expect(roster[0]).toMatchObject({slot: 1, species: "Great Tusk"});
+    expect(roster[3]).toMatchObject({slot: 4, species: "Gholdengo"});
+  });
+
+  it("runs deterministic draft test samples", () => {
+    const first = runDraftTest({
+      you: {name: "You", rawRoster: SAMPLE_TEAM, fixedLead: "Great Tusk"},
+      opponent: {name: "Opponent", rawRoster: SAMPLE_TEAM, fixedLead: "Gholdengo"},
+      options: {
+        seed: "draft-test-seed",
+        runs: 2,
+        maxTurns: 1,
+        variant: {id: "basic-test", kind: "basic"}
+      }
+    });
+    const second = runDraftTest({
+      you: {name: "You", rawRoster: SAMPLE_TEAM, fixedLead: "Great Tusk"},
+      opponent: {name: "Opponent", rawRoster: SAMPLE_TEAM, fixedLead: "Gholdengo"},
+      options: {
+        seed: "draft-test-seed",
+        runs: 2,
+        maxTurns: 1,
+        variant: {id: "basic-test", kind: "basic"}
+      }
+    });
+
+    expect(first.summary.games).toBe(2);
+    expect(first.records.yourLeads[0]).toMatchObject({label: "Great Tusk", games: 2});
+    expect(first.runs.map((run) => run.winner)).toEqual(second.runs.map((run) => run.winner));
+    expect(first.runs.map((run) => run.yourBring)).toEqual(second.runs.map((run) => run.yourBring));
   });
 });
 
